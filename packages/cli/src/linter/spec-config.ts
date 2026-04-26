@@ -59,6 +59,31 @@ const IconographyExampleSchema = z.object({
   colorBinding: z.string(),
 });
 
+const ComponentKindSchema = z.object({
+  name: z.string(),
+  interactive: z.boolean(),
+});
+
+const ComponentStateDefSchema = z.object({
+  name: z.string(),
+  interaction: z.enum(['pointer-only', 'keyboard', 'any']),
+  required: z.boolean().optional(),
+  description: z.string().optional(),
+});
+
+/**
+ * Component example values. Each property is a primitive (string/number/boolean)
+ * or a nested map (for `states:` and similar grouped overrides).
+ */
+const ComponentExampleValueSchema: z.ZodType<unknown> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.record(z.string(), ComponentExampleValueSchema),
+  ])
+);
+
 const ConfigSchema = z.object({
   version: z.string(),
   units: z.array(z.string()).min(1),
@@ -68,9 +93,12 @@ const ConfigSchema = z.object({
   })).min(1),
   typography_properties: z.array(PropertyDefSchema).min(1),
   component_sub_tokens: z.array(PropertyDefSchema).min(1),
+  component_states: z.array(ComponentStateDefSchema).min(1),
   color_roles: z.array(z.string()).min(1),
   icon_libraries: z.array(z.string()).min(1),
   easing_keywords: z.array(z.string()).min(1),
+  component_kinds: z.array(ComponentKindSchema).min(1),
+  component_modifiers: z.array(z.string()).min(1),
   recommended_tokens: z.record(z.string(), z.array(z.string())),
   examples: z.object({
     colors: z.record(z.string(), z.string()),
@@ -78,7 +106,7 @@ const ConfigSchema = z.object({
     typography: z.record(z.string(), z.record(z.string(), z.union([z.string(), z.number()]))),
     motion: MotionExampleSchema.optional(),
     iconography: IconographyExampleSchema.optional(),
-    components: z.record(z.string(), z.record(z.string(), z.string())),
+    components: z.record(z.string(), z.record(z.string(), ComponentExampleValueSchema)),
   }),
 });
 
@@ -134,6 +162,24 @@ export interface ComponentSubTokenDef {
   description?: string | undefined;
 }
 
+export interface ComponentKindDef {
+  /** Kind name (e.g., 'button', 'container'). */
+  name: string;
+  /** Whether components of this kind are interactive by default. */
+  interactive: boolean;
+}
+
+export interface ComponentStateDef {
+  /** Canonical state name (e.g., 'hover', 'focus-visible'). */
+  name: string;
+  /** What kind of input triggers the state. */
+  interaction: 'pointer-only' | 'keyboard' | 'any';
+  /** True if every interactive component MUST declare this state. */
+  required?: boolean | undefined;
+  /** Extended description for the spec. */
+  description?: string | undefined;
+}
+
 // ── Constant exports ─────────────────────────────────────────────────
 // These are eagerly initialized from the lazy singleton on first import.
 // The singleton cache ensures the YAML file is read exactly once.
@@ -153,6 +199,14 @@ export const TYPOGRAPHY_PROPERTIES: readonly TypographyPropertyDef[] = config.ty
 
 export const COMPONENT_SUB_TOKENS: readonly ComponentSubTokenDef[] = config.component_sub_tokens;
 
+/** Known component states with declared semantics. */
+export const COMPONENT_STATES: readonly ComponentStateDef[] = config.component_states;
+
+/** State names that every interactive component MUST declare. */
+export const INTERACTIVE_REQUIRED_STATES: readonly string[] = config.component_states
+  .filter(s => s.required)
+  .map(s => s.name);
+
 /** Core color roles that every design system should define. */
 export const CORE_COLOR_ROLES = config.color_roles;
 
@@ -162,6 +216,20 @@ export type IconLibrary = (typeof ICON_LIBRARIES)[number];
 
 /** CSS easing keywords accepted alongside `cubic-bezier(...)` literals. */
 export const EASING_KEYWORDS = config.easing_keywords;
+
+/** Component kinds (button, container, etc.) and their default interactivity. */
+export const COMPONENT_KINDS: readonly ComponentKindDef[] = config.component_kinds;
+
+/** Set of valid kind names. */
+export const VALID_COMPONENT_KINDS: readonly string[] = COMPONENT_KINDS.map(k => k.name);
+
+/** Per-kind defaults, indexed by name. */
+export const KIND_DEFAULTS: Record<string, { interactive: boolean }> = Object.fromEntries(
+  COMPONENT_KINDS.map(k => [k.name, { interactive: k.interactive }])
+);
+
+/** Closed set of permitted name modifiers (the `-modifier` suffix in `noun-modifier`). */
+export const COMPONENT_MODIFIERS: readonly string[] = config.component_modifiers;
 
 /** Non-normative recommended token names, organized by category. */
 export const RECOMMENDED_TOKENS = config.recommended_tokens;
@@ -192,6 +260,9 @@ export const VALID_TYPOGRAPHY_PROPS = TYPOGRAPHY_PROPERTIES.map(p => p.name);
 /** Valid component sub-token names (for linter validation). */
 export const VALID_COMPONENT_SUB_TOKENS = COMPONENT_SUB_TOKENS.map(p => p.name);
 
+/** Valid component state names (for linter validation). */
+export const VALID_COMPONENT_STATES = COMPONENT_STATES.map(s => s.name);
+
 // ── Aggregate type ────────────────────────────────────────────────────
 
 /** All config values bundled as a single object for renderer injection. */
@@ -201,9 +272,12 @@ export interface SpecConfig {
   SECTIONS: typeof SECTIONS;
   TYPOGRAPHY_PROPERTIES: typeof TYPOGRAPHY_PROPERTIES;
   COMPONENT_SUB_TOKENS: typeof COMPONENT_SUB_TOKENS;
+  COMPONENT_STATES: typeof COMPONENT_STATES;
   CORE_COLOR_ROLES: typeof CORE_COLOR_ROLES;
   ICON_LIBRARIES: typeof ICON_LIBRARIES;
   EASING_KEYWORDS: typeof EASING_KEYWORDS;
+  COMPONENT_KINDS: typeof COMPONENT_KINDS;
+  COMPONENT_MODIFIERS: typeof COMPONENT_MODIFIERS;
   RECOMMENDED_TOKENS: typeof RECOMMENDED_TOKENS;
   EXAMPLES: typeof EXAMPLES;
 }
@@ -215,9 +289,12 @@ export const SPEC_CONFIG: SpecConfig = {
   SECTIONS,
   TYPOGRAPHY_PROPERTIES,
   COMPONENT_SUB_TOKENS,
+  COMPONENT_STATES,
   CORE_COLOR_ROLES,
   ICON_LIBRARIES,
   EASING_KEYWORDS,
+  COMPONENT_KINDS,
+  COMPONENT_MODIFIERS,
   RECOMMENDED_TOKENS,
   EXAMPLES,
 };

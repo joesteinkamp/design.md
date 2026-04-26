@@ -848,5 +848,489 @@
         }
       }
     }
+  },
+  "component": {
+    "button-primary": {
+      "backgroundColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.522,
+            0.325,
+            0
+          ],
+          "hex": "#855300"
+        }
+      },
+      "textColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "hex": "#ffffff"
+        }
+      },
+      "typography": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "Plus Jakarta Sans",
+          "fontSize": {
+            "value": 14,
+            "unit": "px"
+          },
+          "fontWeight": 600,
+          "letterSpacing": {
+            "value": 0.01,
+            "unit": "em"
+          },
+          "lineHeight": 20
+        }
+      },
+      "rounded": {
+        "$type": "dimension",
+        "$value": {
+          "value": 1,
+          "unit": "rem"
+        }
+      },
+      "padding": {
+        "$type": "dimension",
+        "$value": {
+          "value": 24,
+          "unit": "px"
+        }
+      },
+      "transition": {
+        "$value": "opacity 150ms cubic-bezier(0.4, 0, 0.2, 1)"
+      },
+      "$extensions": {
+        "design.md": {
+          "states": {
+            "hover": {
+              "backgroundColor": "#f59e0b",
+              "textColor": "#613b00"
+            },
+            "focus-visible": {
+              "outline": "2px solid {colors.primary}"
+            },
+            "disabled": {
+              "backgroundColor": "#e2e8f8",
+              "textColor": "#151c27",
+              "cursor": "not-allowed"
+            }
+          },
+          "interactive": true
+        }
+      }
+    },
+    "button-secondary": {
+      "backgroundColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.345,
+            0.745
+          ],
+          "hex": "#0058be"
+        }
+      },
+      "textColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "hex": "#ffffff"
+        }
+      },
+      "typography": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "Plus Jakarta Sans",
+          "fontSize": {
+            "value": 14,
+            "unit": "px"
+          },
+          "fontWeight": 600,
+          "letterSpacing": {
+            "value": 0.01,
+            "unit": "em"
+          },
+          "lineHeight": 20
+        }
+      },
+      "rounded": {
+        "$type": "dimension",
+        "$value": {
+          "value": 1,
+          "unit": "rem"
+        }
+      },
+      "padding": {
+        "$type": "dimension",
+        "$value": {
+          "value": 24,
+          "unit": "px"
+        }
+      },
+      "transition": {
+        "$value": "opacity 150ms cubic-bezier(0.4, 0, 0.2, 1)"
+      },
+      "$extensions": {
+        "design.md": {
+          "states": {
+            "hover": {
+              "backgroundColor": "#2170e4",
+              "textColor": "#fefcff"
+            },
+            "focus-visible": {
+              "outline": "2px solid {colors.secondary}"
+            },
+            "disabled": {
+              "backgroundColor": "#e2e8f8",
+              "textColor": "#151c27",
+              "cursor": "not-allowed"
+            }
+          },
+          "interactive": true
+        }
+      }
+    },
+    "card-profile": {
+      "backgroundColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "hex": "#ffffff"
+        }
+      },
+      "rounded": {
+        "$type": "dimension",
+        "$value": {
+          "value": 1.5,
+          "unit": "rem"
+        }
+      },
+      "padding": {
+        "$type": "dimension",
+        "$value": {
+          "value": 24,
+          "unit": "px"
+        }
+      },
+      "gap": {
+        "$type": "dimension",
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        }
+      },
+      "shadow": {
+        "$type": "shadow",
+        "$value": "0 4px 12px rgba(133,83,0,0.10)"
+      },
+      "transition": {
+        "$value": "transform 250ms cubic-bezier(0, 0, 0.2, 1)"
+      },
+      "iconSize": {
+        "$type": "dimension",
+        "$value": {
+          "value": 24,
+          "unit": "px"
+        }
+      }
+    },
+    "modal-walker-detail": {
+      "backgroundColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "hex": "#ffffff"
+        }
+      },
+      "rounded": {
+        "$type": "dimension",
+        "$value": {
+          "value": 1.5,
+          "unit": "rem"
+        }
+      },
+      "padding": {
+        "$type": "dimension",
+        "$value": {
+          "value": 40,
+          "unit": "px"
+        }
+      },
+      "shadow": {
+        "$type": "shadow",
+        "$value": "0 24px 48px rgba(133,83,0,0.18)"
+      },
+      "transition": {
+        "$value": "opacity 400ms cubic-bezier(0, 0, 0.2, 1)"
+      },
+      "iconSize": {
+        "$type": "dimension",
+        "$value": {
+          "value": 32,
+          "unit": "px"
+        }
+      }
+    },
+    "card-walk-stat": {
+      "backgroundColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.129,
+            0.439,
+            0.894
+          ],
+          "hex": "#2170e4"
+        }
+      },
+      "textColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.996,
+            0.988,
+            1
+          ],
+          "hex": "#fefcff"
+        }
+      },
+      "rounded": {
+        "$type": "dimension",
+        "$value": {
+          "value": 0.75,
+          "unit": "rem"
+        }
+      },
+      "padding": {
+        "$type": "dimension",
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        }
+      },
+      "shadow": {
+        "$type": "shadow",
+        "$value": "0 1px 2px rgba(133,83,0,0.06)"
+      }
+    },
+    "input-field": {
+      "backgroundColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.941,
+            0.953,
+            1
+          ],
+          "hex": "#f0f3ff"
+        }
+      },
+      "textColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.082,
+            0.11,
+            0.153
+          ],
+          "hex": "#151c27"
+        }
+      },
+      "typography": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "Plus Jakarta Sans",
+          "fontSize": {
+            "value": 16,
+            "unit": "px"
+          },
+          "fontWeight": 400,
+          "lineHeight": 24
+        }
+      },
+      "rounded": {
+        "$type": "dimension",
+        "$value": {
+          "value": 0.5,
+          "unit": "rem"
+        }
+      },
+      "padding": {
+        "$type": "dimension",
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        }
+      },
+      "border": {
+        "$value": "1px solid {colors.outline-variant}"
+      },
+      "iconSize": {
+        "$type": "dimension",
+        "$value": {
+          "value": 20,
+          "unit": "px"
+        }
+      },
+      "$extensions": {
+        "design.md": {
+          "states": {
+            "focus-visible": {
+              "outline": "2px solid {colors.primary}"
+            },
+            "disabled": {
+              "backgroundColor": "#e2e8f8",
+              "textColor": "#151c27",
+              "cursor": "not-allowed"
+            }
+          },
+          "interactive": true
+        }
+      }
+    },
+    "list-item-walker": {
+      "backgroundColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0,
+            0
+          ],
+          "hex": "#00000000"
+        }
+      },
+      "padding": {
+        "$type": "dimension",
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        }
+      },
+      "rounded": {
+        "$type": "dimension",
+        "$value": {
+          "value": 0.75,
+          "unit": "rem"
+        }
+      },
+      "transition": {
+        "$value": "opacity 150ms cubic-bezier(0.4, 0, 1, 1)"
+      },
+      "iconSize": {
+        "$type": "dimension",
+        "$value": {
+          "value": 16,
+          "unit": "px"
+        }
+      },
+      "$extensions": {
+        "design.md": {
+          "states": {
+            "hover": {
+              "backgroundColor": "#e2e8f8"
+            },
+            "focus-visible": {
+              "outline": "2px solid {colors.primary}"
+            },
+            "disabled": {
+              "textColor": "#151c27",
+              "cursor": "not-allowed"
+            }
+          },
+          "interactive": true
+        }
+      }
+    },
+    "badge-status": {
+      "backgroundColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.102,
+            0.741,
+            1
+          ],
+          "hex": "#1abdff"
+        }
+      },
+      "textColor": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.286,
+            0.4
+          ],
+          "hex": "#004966"
+        }
+      },
+      "typography": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "Plus Jakarta Sans",
+          "fontSize": {
+            "value": 12,
+            "unit": "px"
+          },
+          "fontWeight": 500,
+          "lineHeight": 16
+        }
+      },
+      "rounded": {
+        "$type": "dimension",
+        "$value": {
+          "value": 9999,
+          "unit": "px"
+        }
+      },
+      "padding": {
+        "$type": "dimension",
+        "$value": {
+          "value": 4,
+          "unit": "px"
+        }
+      },
+      "iconSize": {
+        "$type": "dimension",
+        "$value": {
+          "value": 16,
+          "unit": "px"
+        }
+      }
+    }
   }
 }

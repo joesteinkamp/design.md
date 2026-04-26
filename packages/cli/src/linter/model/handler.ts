@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { ParsedDesignSystem, RawColorValue, RawRampDef, RawPairDef, RawMotionDef, RawIconographyDef } from '../parser/spec.js';
+import type { ParsedDesignSystem, RawColorValue, RawRampDef, RawPairDef, RawMotionDef, RawIconographyDef, RawRegistryEntry, RawComponentValue } from '../parser/spec.js';
 import type {
   ModelSpec,
   ModelResult,
@@ -30,6 +30,7 @@ import type {
   ColorIndexEntry,
   MotionState,
   IconographyState,
+  RegistryEntry,
 } from './spec.js';
 
 import {
@@ -43,7 +44,7 @@ import {
 } from './spec.js';
 import { COMPONENT_SUB_TOKEN_VALIDATORS } from '../component-validators.js';
 import { generateRampSteps, DEFAULT_RAMP_STEPS } from './color-ramp.js';
-import { ICON_LIBRARIES } from '../spec-config.js';
+import { ICON_LIBRARIES, KIND_DEFAULTS } from '../spec-config.js';
 
 const MAX_REFERENCE_DEPTH = 10;
 
@@ -247,20 +248,72 @@ export class ModelHandler implements ModelSpec {
         }
       }
 
-      // ── Phase 3: Build components ──────────────────────────────────
+      // ── Phase 3a: Resolve registry ─────────────────────────────────
+      const componentRegistry = input.componentRegistry
+        ? buildRegistry(input.componentRegistry)
+        : undefined;
+
+      // ── Phase 3b: Build components ─────────────────────────────────
       const components = new Map<string, ComponentDef>();
-      if (input.components) {
-        for (const [compName, props] of Object.entries(input.components)) {
+      // Pre-merge composed properties: for each definition, walk its registry
+      // entry's `composes` chain and merge those definitions' raw properties
+      // before resolving overrides. Cycles are short-circuited; the
+      // `composes-cycle` rule reports them.
+      const mergedRaw = mergeComposedDefinitions(input.components ?? {}, componentRegistry);
+      if (mergedRaw) {
+        for (const [compName, props] of Object.entries(mergedRaw)) {
           const properties = new Map<string, ResolvedValue>();
+          const states = new Map<string, Map<string, ResolvedValue>>();
+          const resolvedStates = new Map<string, Map<string, ResolvedValue>>();
           const unresolvedRefs: string[] = [];
           const referencedTokens: string[] = [];
+          let interactive: boolean | undefined;
+
+          const collectRefs = (value: unknown) => {
+            if (typeof value !== 'string') return;
+            for (const m of value.matchAll(/\{([a-zA-Z0-9._-]+)\}/g)) {
+              referencedTokens.push(m[1]!);
+            }
+          };
 
           for (const [propName, rawValue] of Object.entries(props)) {
-            if (typeof rawValue === 'string') {
-              for (const m of rawValue.matchAll(/\{([a-zA-Z0-9._-]+)\}/g)) {
-                referencedTokens.push(m[1]!);
+            // `interactive: true` is a meta-flag, not a property.
+            if (propName === 'interactive') {
+              if (typeof rawValue === 'boolean') {
+                interactive = rawValue;
               }
+              continue;
             }
+            // `states:` is a nested map of state-name → property overrides.
+            if (propName === 'states') {
+              if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+                for (const [stateName, stateProps] of Object.entries(rawValue as Record<string, unknown>)) {
+                  if (!stateProps || typeof stateProps !== 'object' || Array.isArray(stateProps)) continue;
+                  const overrides = new Map<string, ResolvedValue>();
+                  for (const [sPropName, sRawValue] of Object.entries(stateProps as Record<string, unknown>)) {
+                    collectRefs(sRawValue);
+                    const validator = COMPONENT_SUB_TOKEN_VALIDATORS.get(sPropName);
+                    if (validator && typeof sRawValue === 'string') {
+                      const result = validator(sRawValue);
+                      if (!result.ok) {
+                        findings.push({
+                          severity: 'error',
+                          path: `components.${compName}.states.${stateName}.${sPropName}`,
+                          message: result.error ?? `Invalid value for '${sPropName}'.`,
+                        });
+                      }
+                    }
+                    const resolved = resolveComponentValue(sRawValue, symbolTable, unresolvedRefs);
+                    overrides.set(sPropName, resolved);
+                  }
+                  states.set(stateName, overrides);
+                }
+              }
+              continue;
+            }
+
+            collectRefs(rawValue);
+
             // Validate the raw author input against the typed schema.
             // Token references and resolution failures are not validated
             // here — those are handled by the broken-ref rule.
@@ -288,33 +341,21 @@ export class ModelHandler implements ModelSpec {
               }
             }
 
-            if (isTokenReference(rawValue)) {
-              const refPath = rawValue.slice(1, -1);
-              const resolved = resolveReference(symbolTable, refPath, new Set());
-              if (resolved !== null) {
-                properties.set(propName, resolved);
-              } else {
-                unresolvedRefs.push(rawValue);
-                properties.set(propName, rawValue);
-              }
-            } else if (isValidColor(rawValue)) {
-              properties.set(propName, parseColor(rawValue));
-            } else if (isParseableDimension(rawValue)) {
-              properties.set(propName, parseDimension(rawValue));
-            } else if (typeof rawValue === 'string' && EMBEDDED_REF_RE.test(rawValue)) {
-              // Shorthand strings (transitions, borders, shadows) may embed
-              // `{path}` references. Resolve them inline so the property
-              // surfaces the substituted value to exporters and rules.
-              EMBEDDED_REF_RE.lastIndex = 0;
-              const { value, unresolved } = resolveEmbeddedRefs(rawValue, symbolTable);
-              for (const ref of unresolved) unresolvedRefs.push(ref);
-              properties.set(propName, value);
-            } else {
-              properties.set(propName, rawValue);
-            }
+            properties.set(propName, resolveComponentValue(rawValue, symbolTable, unresolvedRefs));
           }
 
-          components.set(compName, { properties, unresolvedRefs, referencedTokens });
+          // Build resolvedStates: base ⊕ state overrides
+          for (const [stateName, overrides] of states) {
+            const merged = new Map<string, ResolvedValue>(properties);
+            for (const [propName, value] of overrides) {
+              merged.set(propName, value);
+            }
+            resolvedStates.set(stateName, merged);
+          }
+
+          const def: ComponentDef = { properties, states, resolvedStates, unresolvedRefs, referencedTokens };
+          if (interactive !== undefined) def.interactive = interactive;
+          components.set(compName, def);
         }
       }
 
@@ -332,6 +373,7 @@ export class ModelHandler implements ModelSpec {
           motion,
           iconography,
           components,
+          componentRegistry,
           colorRamps,
           colorPairs,
           symbolTable,
@@ -366,6 +408,69 @@ export class ModelHandler implements ModelSpec {
       };
     }
   }
+}
+
+// ── Component registry & composition ───────────────────────────────
+
+/**
+ * Build the resolved registry map from raw entries. Defaults `interactive`
+ * from the kind when not explicitly set; missing kinds leave `interactive`
+ * `false`. Duplicate names take the last definition (linter rules can flag
+ * this as a separate concern).
+ */
+function buildRegistry(rawEntries: RawRegistryEntry[]): Map<string, RegistryEntry> {
+  const out = new Map<string, RegistryEntry>();
+  for (const raw of rawEntries) {
+    const interactive = raw.interactive
+      ?? (raw.kind ? KIND_DEFAULTS[raw.kind]?.interactive ?? false : false);
+    const entry: RegistryEntry = {
+      name: raw.name,
+      interactive,
+      requiredProperties: raw.requiredProperties ?? [],
+    };
+    if (raw.kind !== undefined) entry.kind = raw.kind;
+    if (raw.composes !== undefined) entry.composes = raw.composes;
+    out.set(raw.name, entry);
+  }
+  return out;
+}
+
+/**
+ * Pre-merge `composes` chains into a flat raw definitions map, in declaration
+ * order: composed properties are written first, then the definition's own
+ * properties override. Cycles are detected via a visited set and short-
+ * circuited (the chain stops at the cycle point); the linter's
+ * `composes-cycle` rule reports the cycle separately.
+ */
+function mergeComposedDefinitions(
+  rawDefs: Record<string, Record<string, RawComponentValue>>,
+  registry: Map<string, RegistryEntry> | undefined,
+): Record<string, Record<string, RawComponentValue>> {
+  if (!registry) return rawDefs;
+  const out: Record<string, Record<string, RawComponentValue>> = {};
+  for (const [name, props] of Object.entries(rawDefs)) {
+    out[name] = resolveComposedProps(name, rawDefs, registry, new Set());
+    // Ensure props are preserved even if registry has no entry
+    if (!registry.has(name)) {
+      out[name] = props;
+    }
+  }
+  return out;
+}
+
+function resolveComposedProps(
+  name: string,
+  rawDefs: Record<string, Record<string, RawComponentValue>>,
+  registry: Map<string, RegistryEntry>,
+  visited: Set<string>,
+): Record<string, RawComponentValue> {
+  if (visited.has(name)) return {};
+  visited.add(name);
+  const entry = registry.get(name);
+  const ownProps = rawDefs[name] ?? {};
+  if (!entry?.composes) return { ...ownProps };
+  const composed = resolveComposedProps(entry.composes, rawDefs, registry, visited);
+  return { ...composed, ...ownProps };
 }
 
 // ── Object-shaped color expansion (ramps and pairs) ────────────────
@@ -552,6 +657,44 @@ function buildColorIndex(colors: Map<string, ResolvedColor>): Map<string, ColorI
 }
 
 // ── Pure utility functions ─────────────────────────────────────────
+
+/**
+ * Resolve a single component property value (string/number/boolean) into
+ * a ResolvedValue, mutating `unresolvedRefs` for any reference that fails.
+ * Numbers and booleans are returned coerced to string so the existing
+ * downstream consumers (which handle `string` as the catch-all) keep working,
+ * but only when the source value is a primitive non-reference scalar.
+ */
+function resolveComponentValue(
+  rawValue: unknown,
+  symbolTable: Map<string, ResolvedValue>,
+  unresolvedRefs: string[],
+): ResolvedValue {
+  if (typeof rawValue === 'number' || typeof rawValue === 'boolean') {
+    return String(rawValue);
+  }
+  if (typeof rawValue !== 'string') {
+    return String(rawValue);
+  }
+  if (isTokenReference(rawValue)) {
+    const refPath = rawValue.slice(1, -1);
+    const resolved = resolveReference(symbolTable, refPath, new Set());
+    if (resolved !== null) return resolved;
+    unresolvedRefs.push(rawValue);
+    return rawValue;
+  }
+  if (isValidColor(rawValue)) return parseColor(rawValue);
+  if (isParseableDimension(rawValue)) return parseDimension(rawValue);
+  // Shorthand strings (transitions, borders, shadows) may embed `{path}`
+  // references. Resolve them inline so the property surfaces the substituted
+  // value to exporters and rules.
+  if (rawValue.includes('{')) {
+    const { value, unresolved } = resolveEmbeddedRefs(rawValue, symbolTable);
+    for (const ref of unresolved) unresolvedRefs.push(ref);
+    return value;
+  }
+  return rawValue;
+}
 
 /**
  * Parse a hex color string into a ResolvedColor with RGB + WCAG luminance.

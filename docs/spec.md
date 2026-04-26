@@ -392,7 +392,12 @@ This section provides style guidance for component atoms within the design syste
 
 The components section defines a collection of design tokens used to ensure consistent styling of common components. It's a map\<string, map\<string, string>> that maps a component identifier to a group of sub token names and values. The design token values may be literal values, or references to previously defined design tokens.
 
-**Variants**. A component may have a variant for different UI states such as active, hover, pressed, etc. Those variant components may be defined under a different but related key, for example, "button-primary", "button-primary-hover", "button-primary-active". The agent will consider all variants and make the appropriate styling decisions.
+**Variants** (configuration: primary/secondary/danger) and **states**
+(transient response to user input: hover/focus/active/disabled/loading) are
+modeled differently. Variants typically appear as separate component entries
+(e.g., `button-primary`, `button-secondary`). States are nested under a
+component's `states:` block and inherit from the base, overriding only the
+properties that change.
 
 ```yaml
 components:
@@ -402,8 +407,18 @@ components:
     rounded: "{rounded.md}"
     padding: 12px
     transition: opacity {motion.duration.fast} {motion.easing.standard}
-  button-primary-hover:
-    backgroundColor: "{colors.primary-70}"
+    interactive: true
+    states:
+      hover:
+        backgroundColor: "{colors.primary-70}"
+      focus-visible:
+        outline: 2px solid {colors.primary-40}
+      active:
+        opacity: 0.9
+      disabled:
+        backgroundColor: "{colors.surface-variant}"
+        textColor: "{colors.on-surface-variant}"
+        cursor: not-allowed
 ```
 
 ### Component Property Tokens
@@ -427,6 +442,9 @@ Each component has a set of properties that are themselves design tokens:
 - iconSize: \<Dimension | "auto"\>
 - opacity: \<Number\>
 - transition: \<TransitionShorthand\>
+- outline: \<string\>
+- boxShadow: \<string\>
+- cursor: \<string\>
 
 ### Authoring Rules
 
@@ -455,6 +473,114 @@ shape; the prose carries the rationale. Cover at least:
 * **Border usage** — borders communicate input affordances and dividers.
   Borders should not be the primary visual identity of a surface —
   reach for color or elevation first.
+
+### Component Registry (Closed-World)
+
+By default, the components map is **open-world**: any component name is
+accepted and the linter will not complain. To opt into a closed set —
+the equivalent of TypeScript's `noImplicitAny` for components — split
+the components block into a `registry` (the catalog) and `definitions`
+(the values):
+
+```yaml
+components:
+  registry:
+    - name: button-primary
+      kind: button
+      requiredProperties: [backgroundColor, padding]
+    - name: card
+      kind: container
+    - name: card-elevated
+      kind: container
+      composes: card           # pre-merge card's props before overrides
+  definitions:
+    button-primary:
+      backgroundColor: "{colors.primary}"
+      padding: 12px
+    card:
+      backgroundColor: "{colors.surface}"
+    card-elevated:
+      shadow: "{elevation.raised}"
+```
+
+Once a registry is declared, the closed-world rules engage:
+
+* **`unbound-component`** (error) — flags definitions and prose
+  `{components.X}` references whose name isn't in the registry.
+* **`missing-required-property`** (error) — a registry entry's
+  `requiredProperties` must each be set by the matching definition
+  (composed properties count).
+* **`registry-without-definition`** (warning) — a registry entry has no
+  matching definition.
+* **`composes-cycle`** (error) — cycles in the `composes:` graph.
+* **`naming-convention`** (warning) — registry names follow
+  `noun-modifier` ordering with a closed modifier vocabulary
+  (primary/secondary/tertiary/danger/ghost/outline/subtle/bare/elevated/
+  hover/focus/active/disabled).
+
+**Authoring discipline.** Adding a registry entry is a deliberate,
+reviewable act. Definitions can be added or edited freely; only the
+registry edit signals "this system now supports a new component". When
+in doubt, prefer composing existing components (Card with an Image
+inside) over inventing a new one — the registry should grow slowly.
+
+**Variant vs new component.** If two components differ only in color or
+size, they're variants — express the difference via a hover/focus/etc.
+state on a single registry entry, not a separate name. If they differ in
+structure (slots, behavior, role), they're new components and warrant
+their own entry.
+
+**Anti-patterns.** `card-with-image`, `button-but-rounded`, `header-v2`
+— all signals that variants or composition are missing. The naming and
+composition rules above will flag the symptom; the prose explains the
+cure.
+
+### Interactive States
+
+States express transient responses to user input. They live under a
+component's `states:` block and override only the properties that change from
+the rest state. A component opts in by setting `interactive: true`.
+
+The recognized state vocabulary is opinionated but not closed; novel state
+names produce a warning rather than an error.
+
+#### State hierarchy
+
+Visual weight order, lightest to heaviest: rest < hover < focus-visible
+< active < pressed. Each state communicates a different message — never
+combine them into one undifferentiated lift.
+
+#### Focus-visible discipline
+
+Every interactive component **must** declare a `focus-visible` state. Never
+suppress the native outline (`outline: none`) without supplying a replacement
+signal — `boxShadow`, `border`, or an `outline-offset` ring. Focus rings use
+their own dedicated token, not the hover color.
+
+#### Disabled affordance
+
+A `disabled` state must reduce contrast **and** set `cursor: not-allowed`.
+Opacity-only signaling fails for users who can't see the cursor change and is
+opaque to assistive tech.
+
+#### Hover is desktop-only
+
+Hover state must never be the only signal of interactivity. Touch devices
+skip hover entirely; the rest state must already communicate affordance via
+shape, weight, or color.
+
+#### State vs. variant
+
+A state is a transient response to user input (hover, active). A variant is
+a persistent configuration (primary, secondary, danger). Don't conflate
+them; the explosion `button-primary-hover-disabled` is exactly what the
+nested `states:` block exists to prevent.
+
+#### Loading / busy
+
+Loading is a state, not an absence. The component must remain visible and
+indicate progress — never collapse, hide, or replace it with a spinner that
+shifts surrounding layout.
 
 ## Do's and Don'ts
 

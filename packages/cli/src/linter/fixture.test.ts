@@ -18,6 +18,30 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 describe('Fixture Test', () => {
+  it('processes STATES.md with nested component states', () => {
+    const path = join(import.meta.dir, 'fixtures', 'STATES.md');
+    const content = readFileSync(path, 'utf-8');
+
+    const result = lint(content);
+
+    const btn = result.designSystem.components.get('button-primary');
+    expect(btn).toBeDefined();
+    expect(btn?.interactive).toBe(true);
+    expect(btn?.states.size).toBe(4);
+
+    // base ⊕ hover override
+    const hover = btn?.resolvedStates.get('hover');
+    expect(hover).toBeDefined();
+    const hoverBg = hover?.get('backgroundColor');
+    expect(typeof hoverBg === 'object' && hoverBg !== null && 'hex' in hoverBg && hoverBg.hex).toBe('#3d3f42');
+    // base padding survives in merged hover state
+    expect(hover?.has('padding')).toBe(true);
+
+    // No errors expected — all states defined, focus-visible present, etc.
+    const errors = result.findings.filter(f => f.severity === 'error');
+    expect(errors).toEqual([]);
+  });
+
   it('processes DESIGN-test.md', () => {
     // Use import.meta.dir to get the current directory in Bun ESM
     const path = join(import.meta.dir, 'fixtures', 'DESIGN-test.md');
@@ -57,6 +81,33 @@ describe('Fixture Test', () => {
     
     // We expect at least the summary info
     expect(result.summary.infos).toBeGreaterThan(0);
+  });
+
+  it('processes REGISTRY.md with closed-world rules engaged', () => {
+    const path = join(import.meta.dir, 'fixtures', 'REGISTRY.md');
+    const content = readFileSync(path, 'utf-8');
+
+    const result = lint(content);
+
+    // Registry shape parses end-to-end and the resolved state carries it.
+    const registry = result.designSystem.componentRegistry;
+    expect(registry).toBeDefined();
+    expect(registry!.size).toBe(5);
+
+    // Kind-derived interactivity.
+    expect(registry!.get('button-primary')!.interactive).toBe(true);
+    expect(registry!.get('card')!.interactive).toBe(false);
+
+    // composes pre-merge — card-elevated inherits backgroundColor from card.
+    const cardElevated = result.designSystem.components.get('card-elevated')!;
+    const bg = cardElevated.properties.get('backgroundColor');
+    expect(typeof bg === 'object' && bg !== null && 'type' in bg && bg.type === 'color').toBe(true);
+
+    // No unbound-component or missing-required-property errors.
+    const unboundErrors = result.findings.filter(d => d.message.includes('not in the component registry'));
+    expect(unboundErrors).toEqual([]);
+    const missingRequired = result.findings.filter(d => d.message.includes('requires '));
+    expect(missingRequired).toEqual([]);
   });
 
   it('processes RAMPS_AND_PAIRS.md end-to-end with no errors', () => {

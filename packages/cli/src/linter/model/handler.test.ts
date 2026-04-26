@@ -245,6 +245,64 @@ describe('ModelHandler', () => {
     });
   });
 
+  describe('component states', () => {
+    it('parses interactive flag and produces resolvedStates merged from base', () => {
+      const result = handler.execute(makeParsed({
+        colors: { primary: '#1A1C1E', accent: '#FF0000' },
+        components: {
+          'btn': {
+            backgroundColor: '{colors.primary}',
+            padding: '12px',
+            interactive: true,
+            states: {
+              hover: { backgroundColor: '{colors.accent}' },
+            },
+          },
+        },
+      }));
+      const btn = result.designSystem.components.get('btn');
+      expect(btn).toBeDefined();
+      expect(btn?.interactive).toBe(true);
+      expect(btn?.states.size).toBe(1);
+      const hover = btn?.resolvedStates.get('hover');
+      expect(hover).toBeDefined();
+      // Merged: base padding survives, hover backgroundColor overrides base
+      expect(hover?.has('padding')).toBe(true);
+      const bg = hover?.get('backgroundColor');
+      expect(typeof bg === 'object' && bg !== null && 'hex' in bg && bg.hex).toBe('#ff0000');
+    });
+
+    it('records unresolved refs from inside state overrides', () => {
+      const result = handler.execute(makeParsed({
+        colors: { primary: '#1A1C1E' },
+        components: {
+          'btn': {
+            backgroundColor: '{colors.primary}',
+            interactive: true,
+            states: {
+              hover: { backgroundColor: '{colors.does-not-exist}' },
+            },
+          },
+        },
+      }));
+      const btn = result.designSystem.components.get('btn');
+      expect(btn?.unresolvedRefs).toContain('{colors.does-not-exist}');
+    });
+
+    it('omits states when none are declared', () => {
+      const result = handler.execute(makeParsed({
+        colors: { primary: '#1A1C1E' },
+        components: {
+          'btn': { backgroundColor: '{colors.primary}' },
+        },
+      }));
+      const btn = result.designSystem.components.get('btn');
+      expect(btn?.states.size).toBe(0);
+      expect(btn?.resolvedStates.size).toBe(0);
+      expect(btn?.interactive).toBeUndefined();
+    });
+  });
+
   describe('return signature', () => {
     it('returns findings array', () => {
       const result = handler.execute(makeParsed({
@@ -541,6 +599,75 @@ describe('ModelHandler', () => {
       }));
       expect(result.designSystem.iconography).toBeUndefined();
       expect(result.findings.some(f => f.severity === 'error' && f.path === 'iconography.library')).toBe(true);
+    });
+  });
+
+  describe('component registry', () => {
+    it('omits componentRegistry when not declared (open-world back-compat)', () => {
+      const result = handler.execute(makeParsed({
+        components: { card: { backgroundColor: '#000' } },
+      }));
+      expect(result.designSystem.componentRegistry).toBeUndefined();
+    });
+
+    it('builds the registry map with kind-derived interactivity', () => {
+      const result = handler.execute(makeParsed({
+        componentRegistry: [
+          { name: 'button-primary', kind: 'button' },
+          { name: 'card', kind: 'container' },
+        ],
+        components: {
+          'button-primary': { backgroundColor: '#000' },
+          card: { backgroundColor: '#fff' },
+        },
+      }));
+      const registry = result.designSystem.componentRegistry!;
+      expect(registry.get('button-primary')!.interactive).toBe(true);
+      expect(registry.get('card')!.interactive).toBe(false);
+    });
+
+    it('lets explicit interactive override the kind default', () => {
+      const result = handler.execute(makeParsed({
+        componentRegistry: [
+          { name: 'card', kind: 'container', interactive: true },
+        ],
+        components: { card: { backgroundColor: '#000' } },
+      }));
+      expect(result.designSystem.componentRegistry!.get('card')!.interactive).toBe(true);
+    });
+
+    it('pre-merges composed properties before child overrides', () => {
+      const result = handler.execute(makeParsed({
+        colors: { primary: '#ff0000' },
+        componentRegistry: [
+          { name: 'card', kind: 'container' },
+          { name: 'card-elevated', kind: 'container', composes: 'card' },
+        ],
+        components: {
+          card: { backgroundColor: '{colors.primary}', padding: '12px' },
+          'card-elevated': { padding: '24px' },
+        },
+      }));
+      const elevated = result.designSystem.components.get('card-elevated')!;
+      const bg = elevated.properties.get('backgroundColor');
+      // Inherited from card.
+      expect(typeof bg === 'object' && bg !== null && 'type' in bg && bg.type === 'color').toBe(true);
+      // Own override wins.
+      const padding = elevated.properties.get('padding');
+      expect(typeof padding === 'object' && padding !== null && 'value' in padding ? padding.value : null).toBe(24);
+    });
+
+    it('short-circuits composes cycles without crashing', () => {
+      const result = handler.execute(makeParsed({
+        componentRegistry: [
+          { name: 'a', kind: 'container', composes: 'b' },
+          { name: 'b', kind: 'container', composes: 'a' },
+        ],
+        components: { a: { padding: '12px' }, b: { padding: '8px' } },
+      }));
+      // Build succeeded; the linter rule reports the cycle.
+      expect(result.designSystem.components.has('a')).toBe(true);
+      expect(result.designSystem.components.has('b')).toBe(true);
     });
   });
 });

@@ -153,6 +153,24 @@ export type ResolvedValue =
 export const VALID_TYPOGRAPHY_PROPS = _VALID_TYPOGRAPHY_PROPS;
 export const VALID_COMPONENT_SUB_TOKENS = _VALID_COMPONENT_SUB_TOKENS;
 
+/**
+ * A resolved registry entry. When `componentRegistry` is present in the
+ * `DesignSystemState`, it constitutes the closed set of valid component names
+ * for the design system; any name outside the registry is a `unbound-component`
+ * violation.
+ */
+export interface RegistryEntry {
+  name: string;
+  /** Kind drives default behaviors (e.g., interactivity). */
+  kind?: string;
+  /** Final interactivity flag — explicit setting wins over kind default. */
+  interactive: boolean;
+  /** Property names the matching definition must set. */
+  requiredProperties: string[];
+  /** Composition target — pre-merge that entry's definition before overrides. */
+  composes?: string;
+}
+
 // ── STATE ──────────────────────────────────────────────────────────
 export interface DesignSystemState {
   name?: string | undefined;
@@ -184,6 +202,11 @@ export interface DesignSystemState {
    */
   iconography?: IconographyState | undefined;
   components: Map<string, ComponentDef>;
+  /**
+   * Closed-world registry of component names. Absent = open-world (back-compat);
+   * present = the closed set of valid names.
+   */
+  componentRegistry?: Map<string, RegistryEntry> | undefined;
   /** Ramp definitions, keyed by ramp name. */
   colorRamps: Map<string, RampDef>;
   /** Pair definitions, keyed by pair name. */
@@ -213,7 +236,21 @@ export interface ColorIndexEntry {
 }
 
 export interface ComponentDef {
+  /** Base property values (rest state). */
   properties: Map<string, ResolvedValue>;
+  /** Whether the component is interactive (drives state requirements). */
+  interactive?: boolean | undefined;
+  /**
+   * State-only overrides. Each entry maps a state name to the properties that
+   * differ from the base.
+   */
+  states: Map<string, Map<string, ResolvedValue>>;
+  /**
+   * Effective property maps per state — `properties` ⊕ each state's overrides.
+   * Computed once during model build so downstream rules and exporters do
+   * not reimplement merging.
+   */
+  resolvedStates: Map<string, Map<string, ResolvedValue>>;
   /** Unresolved references that failed to resolve */
   unresolvedRefs: string[];
   /**
