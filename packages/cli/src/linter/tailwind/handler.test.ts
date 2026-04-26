@@ -113,6 +113,76 @@ describe('TailwindEmitterHandler', () => {
     });
   });
 
+  // ── Issue #2: elevation → boxShadow ──────────────────────────────
+  describe('elevation mapping', () => {
+    it('maps elevation tokens to theme.extend.boxShadow', () => {
+      const state = buildState({
+        elevation: {
+          resting: '0 1px 2px rgba(0,0,0,0.06)',
+          raised: '0 4px 8px rgba(0,0,0,0.08)',
+        },
+      });
+      const result = emitter.execute(state);
+      if (!result.success) throw new Error('Expected success');
+      expect(result.data.theme.extend.boxShadow?.['resting']).toBe('0 1px 2px rgba(0,0,0,0.06)');
+      expect(result.data.theme.extend.boxShadow?.['raised']).toBe('0 4px 8px rgba(0,0,0,0.08)');
+    });
+  });
+
+  // ── Ramps and pairs ───────────────────────────────────────────────
+  describe('ramps and pairs', () => {
+    it('emits ramps as nested objects with DEFAULT and step keys', () => {
+      const state = buildState({
+        colors: { primary: { type: 'ramp', anchor: '#3b82f6', humanName: 'Sky' } },
+      });
+      const result = emitter.execute(state);
+      if (!result.success) throw new Error('Expected success');
+      const colors = result.data.theme.extend.colors!;
+      const primary = colors['primary'];
+      expect(typeof primary).toBe('object');
+      const ramp = primary as Record<string, string>;
+      expect(ramp['DEFAULT']).toBe('#3b82f6');
+      expect(ramp['500']).toBe('#3b82f6');
+      expect(ramp['50']).toBeDefined();
+      expect(ramp['900']).toBeDefined();
+      // Steps should not also leak as top-level entries.
+      expect(colors['primary.500']).toBeUndefined();
+    });
+
+    it('emits standalone pair members under hyphenated flat keys', () => {
+      const state = buildState({
+        colors: {
+          'surface-info': { type: 'pair', container: '#E0F2FE', onContainer: '#0C4A6E' },
+        },
+      });
+      const result = emitter.execute(state);
+      if (!result.success) throw new Error('Expected success');
+      const colors = result.data.theme.extend.colors!;
+      expect(colors['surface-info']).toBe('#e0f2fe');
+      expect(colors['on-surface-info']).toBe('#0c4a6e');
+      // The dotted-form internal members must not leak as top-level keys.
+      expect(colors['surface-info.container']).toBeUndefined();
+    });
+
+    it('emits inline-ramp pair flat aliases in M3 form', () => {
+      const state = buildState({
+        colors: {
+          primary: {
+            type: 'ramp',
+            anchor: '#3b82f6',
+            humanName: 'Sky',
+            pairs: { container: { bg: 100, fg: 800 } },
+          },
+        },
+      });
+      const result = emitter.execute(state);
+      if (!result.success) throw new Error('Expected success');
+      const colors = result.data.theme.extend.colors!;
+      expect(colors['primary-container']).toBeDefined();
+      expect(colors['on-primary-container']).toBeDefined();
+    });
+  });
+
   describe('components plugin (opt-in)', () => {
     it('omits the plugin block by default', () => {
       const state = buildState({

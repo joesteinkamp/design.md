@@ -42,6 +42,11 @@ export interface DtcgToken {
   $type?: string;
   $value: DtcgColorValue | DtcgDimensionValue | DtcgTypographyValue | string | number;
   $description?: string;
+  /**
+   * DTCG vendor extensions. We use `design.md` as the namespace for ramp
+   * provenance, pair role, human-readable anchor names, and per-component
+   * `interactive` / `states` overrides.
+   */
   $extensions?: Record<string, unknown>;
 }
 

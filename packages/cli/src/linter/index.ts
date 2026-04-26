@@ -49,6 +49,13 @@ export {
   hoverOnlyAffordance,
   disabledOpacityOnly,
   unknownState,
+  opacityStacking,
+  animatingLayoutProperty,
+  elevationWithoutSemantics,
+  tripleSeparation,
+  pairContrast,
+  mixedPairForeground,
+  rampAnchorNaming,
 } from './linter/rules/index.js';
 export { contrastRatio } from './model/handler.js';
 export { TailwindEmitterHandler } from './tailwind/handler.js';

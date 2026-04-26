@@ -24,7 +24,10 @@ describe('LintRule type', () => {
       typography: new Map(),
       rounded: new Map(),
       spacing: new Map(),
+      elevation: new Map(),
       components: new Map(),
+      colorRamps: new Map(),
+      colorPairs: new Map(),
       symbolTable: new Map(),
     })).toEqual([]);
   });
@@ -40,7 +43,7 @@ describe('LintRule type', () => {
   });
 
   it('has all rules in DEFAULT_RULE_DESCRIPTORS', () => {
-    expect(DEFAULT_RULE_DESCRIPTORS.length).toBe(14);
+    expect(DEFAULT_RULE_DESCRIPTORS.length).toBe(21);
     DEFAULT_RULE_DESCRIPTORS.forEach((rule: RuleDescriptor) => {
       expect(rule.name).toBeTruthy();
       expect(rule.severity).toBeTruthy();

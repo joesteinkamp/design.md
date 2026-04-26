@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import type { DtcgEmitterSpec, DtcgEmitterResult, DtcgTokenFile, DtcgToken, DtcgGroup, DtcgColorValue, DtcgDimensionValue, DtcgTypographyValue, DesignMdStatesExtension } from './spec.js';
-import type { ComponentDef, DesignSystemState, ResolvedColor, ResolvedDimension, ResolvedTypography, ResolvedValue } from '../model/spec.js';
+import type { ComponentDef, DesignSystemState, ResolvedColor, ResolvedDimension, ResolvedShadow, ResolvedTypography, ResolvedValue } from '../model/spec.js';
 
 const DTCG_SCHEMA_URL = 'https://www.designtokens.org/schemas/2025.10/format.json';
 const DESIGN_MD_EXTENSION_KEY = 'design.md';
@@ -44,10 +44,34 @@ export class DtcgEmitterHandler implements DtcgEmitterSpec {
     const typographyGroup = this.mapTypography(state);
     if (typographyGroup) file['typography'] = typographyGroup;
 
+    const elevationGroup = this.mapElevation(state);
+    if (elevationGroup) file['elevation'] = elevationGroup;
+
     const componentGroup = this.mapComponents(state);
     if (componentGroup) file['component'] = componentGroup;
 
     return { success: true, data: file as Record<string, unknown> };
+  }
+
+  private mapElevation(state: DesignSystemState): DtcgGroup | null {
+    if (state.elevation.size === 0) return null;
+    const group: DtcgGroup = { $type: 'shadow' };
+    for (const [name, shadow] of state.elevation) {
+      group[name] = {
+        $value: this.shadowToValue(shadow),
+      } as DtcgToken;
+    }
+    return group;
+  }
+
+  /**
+   * Emit the raw CSS shadow string. Round-tripping the full DTCG composite
+   * shadow grammar (offset / blur / spread / color objects) is intentionally
+   * deferred — the raw string preserves all author intent and works with
+   * downstream consumers that pass shadows through verbatim.
+   */
+  private shadowToValue(shadow: ResolvedShadow): string {
+    return shadow.raw;
   }
 
   /**
@@ -99,6 +123,7 @@ export class DtcgEmitterHandler implements DtcgEmitterSpec {
     if (typeof value === 'object' && value !== null && 'type' in value) {
       if (value.type === 'color') return value.hex;
       if (value.type === 'dimension') return `${value.value}${value.unit}`;
+      if (value.type === 'shadow') return value.raw;
     }
     return String(value);
   }
@@ -114,6 +139,9 @@ export class DtcgEmitterHandler implements DtcgEmitterSpec {
       if (value.type === 'typography') {
         return { $type: 'typography', $value: this.typographyToValue(value as ResolvedTypography) };
       }
+      if (value.type === 'shadow') {
+        return { $type: 'shadow', $value: (value as ResolvedShadow).raw };
+      }
     }
     if (typeof value === 'string' || typeof value === 'number') {
       return { $value: value };
@@ -124,11 +152,71 @@ export class DtcgEmitterHandler implements DtcgEmitterSpec {
   private mapColors(state: DesignSystemState): DtcgGroup | null {
     if (state.colors.size === 0) return null;
     const group: DtcgGroup = { $type: 'color' };
-    for (const [name, color] of state.colors) {
-      group[name] = {
-        $value: this.colorToValue(color),
+
+    // Ramps emit as nested groups: every step is a token at `<ramp>.<step>`,
+    // and a sibling alias `<ramp>` aliases the anchor step (default 500) so
+    // unqualified references like `{primary}` keep resolving downstream.
+    for (const [rampName, ramp] of state.colorRamps) {
+      const rampGroup: DtcgGroup = { $type: 'color' };
+      const extension: Record<string, unknown> = { type: 'ramp' };
+      if (ramp.humanName) extension['humanName'] = ramp.humanName;
+      if (ramp.description) extension['description'] = ramp.description;
+      rampGroup['$extensions'] = { 'design.md': extension };
+
+      for (const [step, color] of [...ramp.steps].sort(([a], [b]) => a - b)) {
+        rampGroup[String(step)] = {
+          $value: this.colorToValue(color),
+        } as DtcgToken;
+      }
+      // Anchor alias under the ramp's name. Use a DTCG `$value` reference so
+      // round-trip consumers preserve the link between the two tokens.
+      rampGroup['anchor'] = {
+        $value: `{color.${rampName}.500}`,
       } as DtcgToken;
+      group[rampName] = rampGroup;
     }
+
+    // Standalone pairs emit as nested groups with both members + a vendor
+    // extension that records the pair role. Inline-ramp pairs are flattened
+    // (their members already live in state.colors as hyphenated aliases).
+    for (const [pairName, pair] of state.colorPairs) {
+      if (pair.derivedFromRamp) continue;
+      const pairGroup: DtcgGroup = {
+        $type: 'color',
+        $extensions: { 'design.md': { type: 'pair', minContrast: pair.minContrast } },
+      };
+      pairGroup['container'] = {
+        $value: this.colorToValue(pair.container),
+        $extensions: { 'design.md': { pair: pairName, role: 'container' } },
+      } as DtcgToken;
+      pairGroup['onContainer'] = {
+        $value: this.colorToValue(pair.onContainer),
+        $extensions: { 'design.md': { pair: pairName, role: 'on-container' } },
+      } as DtcgToken;
+      group[pairName] = pairGroup;
+    }
+
+    // Flat colors (and inline-ramp-pair flat aliases) emit as top-level tokens.
+    // Skip:
+    // - ramp steps (already nested under their ramp)
+    // - dotted standalone-pair members (already nested under their pair group)
+    // - flat aliases of standalone pairs (would overwrite the pair group)
+    for (const [name, color] of state.colors) {
+      if (color.rampMember) continue;
+      if (color.pairRole && !pair_isFlatAlias(name)) continue;
+      if (color.pairRole) {
+        const owningPair = state.colorPairs.get(color.pairRole.pair);
+        if (owningPair && !owningPair.derivedFromRamp) continue;
+      }
+      const token: DtcgToken = {
+        $value: this.colorToValue(color),
+      };
+      if (color.pairRole) {
+        token.$extensions = { 'design.md': { pair: color.pairRole.pair, role: color.pairRole.role } };
+      }
+      group[name] = token;
+    }
+
     return group;
   }
 
@@ -190,4 +278,14 @@ export class DtcgEmitterHandler implements DtcgEmitterSpec {
   private round(n: number): number {
     return Math.round(n * 1000) / 1000;
   }
+}
+
+/**
+ * Whether a color map key is a flat pair-member alias (e.g., `primary-container`,
+ * `on-primary-container`, `surface-info`, `on-surface-info`) rather than a
+ * dotted member like `surface-info.container`. Flat aliases are emitted as
+ * top-level DTCG tokens; dotted members already live inside their pair group.
+ */
+function pair_isFlatAlias(name: string): boolean {
+  return !name.includes('.');
 }

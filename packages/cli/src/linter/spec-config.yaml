@@ -70,22 +70,46 @@ component_sub_tokens:
     type: Dimension
   - name: padding
     type: Dimension
+    description: "Accepts a single Dimension (`12px`) or a CSS shorthand of two-to-four Dimensions (`12px 16px`)."
   - name: size
     type: Dimension
   - name: height
     type: Dimension
   - name: width
     type: Dimension
+  - name: border
+    type: BorderShorthand
+    description: "CSS shorthand `<width> <style> <color>` (e.g., `1px solid {colors.outline}`) or a Color/Dimension token reference."
+  - name: borderColor
+    type: Color
+  - name: borderWidth
+    type: Dimension
+  - name: shadow
+    type: ShadowValue
+    description: "CSS shorthand `<offsetX> <offsetY> <blur> [<spread>] <color>` or a reference to an `{elevation.*}` token."
+  - name: elevation
+    type: ElevationLevel
+    description: "Reference to an `{elevation.*}` token (semantic: resting, raised, overlay, modal)."
+  - name: gap
+    type: Dimension
+  - name: iconSize
+    type: "Dimension | \"auto\""
+    description: "`auto` (the default) follows the nearest text size. Otherwise a Dimension or `{typography.*}` reference."
   - name: opacity
-    type: number
+    type: Number
+    description: "A unitless number between 0 and 1. Use for state (disabled, loading), not for tinting."
+  - name: transition
+    type: TransitionShorthand
+    description: "CSS shorthand `<property> <duration> <easing>`. Until motion tokens land, literal values are accepted with a warning."
   - name: outline
     type: string
+    description: "CSS outline shorthand (typically used in `focus-visible` state)."
   - name: boxShadow
     type: string
-  - name: border
-    type: string
+    description: "CSS box-shadow string. Prefer `shadow` + the `elevation.*` semantic tokens."
   - name: cursor
     type: string
+    description: "CSS cursor keyword. Pair `cursor: not-allowed` with disabled-state contrast changes."
 
 # Interactive component states. The vocabulary is opinionated but not closed
 # (unknown states warn rather than error).
@@ -115,6 +139,31 @@ color_roles:
   - secondary
   - tertiary
   - neutral
+
+# Color value shapes
+# ──────────────────
+# In addition to a flat hex (`primary: "#1A1C1E"`), `colors` accepts two
+# object-shaped forms that the model expands into flat tokens:
+#
+#   primary:                              # ramp: derives 50/100/.../900 in OKLCH
+#     type: ramp
+#     anchor: "#1A1C1E"
+#     humanName: "Boston Clay"
+#     description: "Driver for interaction."
+#     steps: [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]   # optional
+#     pairs:                              # optional inline pair derivations
+#       container: { bg: 100, fg: 800 }   # synthesizes primary-container / on-primary-container
+#
+#   surface-info:                         # pair: foreground/background bound together
+#     type: pair
+#     container:    "#E0F2FE"
+#     onContainer:  "#0C4A6E"
+#     minContrast:  4.5                   # WCAG AA body; 7 for AAA
+#
+# References resolve in dotted form (`{colors.primary.500}`,
+# `{colors.surface-info.container}`) and via flat aliases (`{colors.primary}`
+# for the anchor, `{colors.surface-info}` for the container, `{colors.on-surface-info}`
+# for the on-container, `{colors.primary-container}` for ramp-derived pairs).
 
 recommended_tokens:
   colors:
@@ -149,6 +198,11 @@ examples:
     secondary: "#6C7278"
     tertiary: "#B8422E"
     neutral: "#F7F5F2"
+  elevation:
+    resting: "0 1px 2px rgba(0,0,0,0.06)"
+    raised: "0 4px 8px rgba(0,0,0,0.08)"
+    overlay: "0 12px 24px rgba(0,0,0,0.12)"
+    modal: "0 24px 48px rgba(0,0,0,0.16)"
   typography:
     h1:
       fontFamily: Public Sans

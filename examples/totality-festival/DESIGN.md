@@ -117,7 +117,7 @@ components:
         textColor: "{colors.on-surface}"
         cursor: not-allowed
   button-secondary:
-    backgroundColor: transparent
+    backgroundColor: "#00000000"
     textColor: "{colors.secondary}"
     typography: "{typography.label-md}"
     rounded: "{rounded.lg}"
@@ -127,7 +127,7 @@ components:
     interactive: true
     states:
       hover:
-        backgroundColor: rgba(0, 227, 253, 0.1)
+        backgroundColor: "#00e3fd1a"
       focus-visible:
         outline: "2px solid {colors.secondary}"
       disabled:
@@ -135,18 +135,18 @@ components:
         border: "1px solid {colors.outline}"
         cursor: not-allowed
   card-glass-level-2:
-    backgroundColor: rgba(52, 52, 58, 0.2)
+    backgroundColor: "#34343a33"
     rounded: "{rounded.xl}"
     padding: "{spacing.gutter}"
   card-glass-interactive:
-    backgroundColor: rgba(52, 52, 58, 0.2)
+    backgroundColor: "#34343a33"
     rounded: "{rounded.xl}"
     padding: "{spacing.gutter}"
-    border: "1px solid rgba(255, 255, 255, 0.08)"
+    border: "1px solid #ffffff14"
     interactive: true
     states:
       hover:
-        backgroundColor: rgba(56, 57, 63, 0.4)
+        backgroundColor: "#38393f66"
       focus-visible:
         outline: "2px solid {colors.secondary}"
       disabled:
@@ -167,7 +167,7 @@ components:
         textColor: "{colors.on-surface}"
         cursor: not-allowed
   list-item:
-    backgroundColor: transparent
+    backgroundColor: "#00000000"
     textColor: "{colors.on-surface}"
     rounded: "{rounded.md}"
     padding: 8px

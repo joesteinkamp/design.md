@@ -775,7 +775,16 @@
     },
     "button-secondary": {
       "backgroundColor": {
-        "$value": "transparent"
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0,
+            0
+          ],
+          "hex": "#00000000"
+        }
       },
       "textColor": {
         "$type": "color",
@@ -833,7 +842,7 @@
         "design.md": {
           "states": {
             "hover": {
-              "backgroundColor": "rgba(0, 227, 253, 0.1)"
+              "backgroundColor": "#00e3fd1a"
             },
             "focus-visible": {
               "outline": "2px solid {colors.secondary}"
@@ -850,7 +859,16 @@
     },
     "card-glass-level-2": {
       "backgroundColor": {
-        "$value": "rgba(52, 52, 58, 0.2)"
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.204,
+            0.204,
+            0.227
+          ],
+          "hex": "#34343a33"
+        }
       },
       "rounded": {
         "$type": "dimension",
@@ -869,7 +887,16 @@
     },
     "card-glass-interactive": {
       "backgroundColor": {
-        "$value": "rgba(52, 52, 58, 0.2)"
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.204,
+            0.204,
+            0.227
+          ],
+          "hex": "#34343a33"
+        }
       },
       "rounded": {
         "$type": "dimension",
@@ -886,13 +913,13 @@
         }
       },
       "border": {
-        "$value": "1px solid rgba(255, 255, 255, 0.08)"
+        "$value": "1px solid #ffffff14"
       },
       "$extensions": {
         "design.md": {
           "states": {
             "hover": {
-              "backgroundColor": "rgba(56, 57, 63, 0.4)"
+              "backgroundColor": "#38393f66"
             },
             "focus-visible": {
               "outline": "2px solid {colors.secondary}"
@@ -979,7 +1006,16 @@
     },
     "list-item": {
       "backgroundColor": {
-        "$value": "transparent"
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0,
+            0
+          ],
+          "hex": "#00000000"
+        }
       },
       "textColor": {
         "$type": "color",

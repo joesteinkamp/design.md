@@ -17,12 +17,17 @@ import type { Config } from 'tailwindcss';
 import type { DesignSystemState } from '../model/spec.js';
 
 // ── TAILWIND CONFIG SCHEMA ──────────────────────────────────────────
+// Colors can be flat strings (`primary: "#1a1c1e"`) or nested ramp/pair
+// objects (`primary: { DEFAULT: "...", "500": "...", ... }`). Tailwind
+// natively understands both forms.
 export const TailwindThemeExtendSchema = z.object({
-  colors: z.record(z.string()).optional(),
+  colors: z.record(z.union([z.string(), z.record(z.string())])).optional(),
   fontFamily: z.record(z.array(z.string())).optional(),
   fontSize: z.record(z.tuple([z.string(), z.record(z.string())])).optional(),
   borderRadius: z.record(z.string()).optional(),
   spacing: z.record(z.string()).optional(),
+  /** Map of elevation token name → CSS box-shadow string. */
+  boxShadow: z.record(z.string()).optional(),
 });
 
 export type TailwindThemeExtend = z.infer<typeof TailwindThemeExtendSchema>;

@@ -12,19 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { ParsedDesignSystem } from '../parser/spec.js';
+import type { ParsedDesignSystem, RawColorValue, RawRampDef, RawPairDef } from '../parser/spec.js';
 import type {
   ModelSpec,
   ModelResult,
   ResolvedColor,
   ResolvedDimension,
   ResolvedTypography,
+  ResolvedShadow,
   ResolvedValue,
   ComponentDef,
   Finding,
+  RampDef,
+  PairDef,
 } from './spec.js';
 
 import { isValidColor, isParseableDimension, isTokenReference, parseDimensionParts } from './spec.js';
+import { COMPONENT_SUB_TOKEN_VALIDATORS } from '../component-validators.js';
+import { generateRampSteps, DEFAULT_RAMP_STEPS } from './color-ramp.js';
 
 const MAX_REFERENCE_DEPTH = 10;
 
@@ -43,26 +48,33 @@ export class ModelHandler implements ModelSpec {
       const typography = new Map<string, ResolvedTypography>();
       const rounded = new Map<string, ResolvedDimension>();
       const spacing = new Map<string, ResolvedDimension>();
+      const elevation = new Map<string, ResolvedShadow>();
+      const colorRamps = new Map<string, RampDef>();
+      const colorPairs = new Map<string, PairDef>();
 
       // ── Phase 1: Resolve primitive tokens ──────────────────────────
       // Colors
       if (input.colors) {
         for (const [name, raw] of Object.entries(input.colors)) {
-          if (isTokenReference(raw)) {
-            // Store raw reference for later resolution
-            symbolTable.set(`colors.${name}`, raw);
-          } else if (isValidColor(raw)) {
-            const resolved = parseColor(raw);
-            colors.set(name, resolved);
-            symbolTable.set(`colors.${name}`, resolved);
-          } else {
-            findings.push({
-              severity: 'error',
-              path: `colors.${name}`,
-              message: `'${raw}' is not a valid color. Expected a hex color code (e.g., #ffffff).`,
-            });
-            // Store as-is for fallback
-            symbolTable.set(`colors.${name}`, raw);
+          if (typeof raw === 'string') {
+            if (isTokenReference(raw)) {
+              // Store raw reference for later resolution
+              symbolTable.set(`colors.${name}`, raw);
+            } else if (isValidColor(raw)) {
+              const resolved = parseColor(raw);
+              colors.set(name, resolved);
+              symbolTable.set(`colors.${name}`, resolved);
+            } else {
+              findings.push({
+                severity: 'error',
+                path: `colors.${name}`,
+                message: `'${raw}' is not a valid color. Expected a hex color code (e.g., #ffffff).`,
+              });
+              // Store as-is for fallback
+              symbolTable.set(`colors.${name}`, raw);
+            }
+          } else if (raw && typeof raw === 'object') {
+            expandObjectColor(name, raw, { colors, colorRamps, colorPairs, symbolTable, findings });
           }
         }
       }
@@ -118,11 +130,27 @@ export class ModelHandler implements ModelSpec {
         }
       }
 
+      // Elevation — semantic shadow tokens (resting / raised / overlay / modal).
+      // Values are CSS shadow strings; validation is generous to match the
+      // wide CSS shadow grammar.
+      if (input.elevation) {
+        for (const [name, raw] of Object.entries(input.elevation)) {
+          if (typeof raw !== 'string') continue;
+          if (isTokenReference(raw)) {
+            symbolTable.set(`elevation.${name}`, raw);
+          } else {
+            const shadow: ResolvedShadow = { type: 'shadow', raw };
+            elevation.set(name, shadow);
+            symbolTable.set(`elevation.${name}`, shadow);
+          }
+        }
+      }
+
       // ── Phase 2: Resolve chained color references ──────────────────
       // Iterate color entries that are still raw references and resolve them
       if (input.colors) {
         for (const [name, raw] of Object.entries(input.colors)) {
-          if (isTokenReference(raw)) {
+          if (typeof raw === 'string' && isTokenReference(raw)) {
             const resolved = resolveReference(symbolTable, raw.slice(1, -1), new Set());
             if (resolved !== null && typeof resolved === 'object' && 'type' in resolved && resolved.type === 'color') {
               colors.set(name, resolved as ResolvedColor);
@@ -168,6 +196,24 @@ export class ModelHandler implements ModelSpec {
         }
       }
 
+      // Resolve chained elevation references
+      if (input.elevation) {
+        for (const [name, raw] of Object.entries(input.elevation)) {
+          if (typeof raw === 'string' && isTokenReference(raw)) {
+            const resolved = resolveReference(symbolTable, raw.slice(1, -1), new Set());
+            if (
+              resolved !== null &&
+              typeof resolved === 'object' &&
+              'type' in resolved &&
+              resolved.type === 'shadow'
+            ) {
+              elevation.set(name, resolved as ResolvedShadow);
+              symbolTable.set(`elevation.${name}`, resolved);
+            }
+          }
+        }
+      }
+
       // ── Phase 3: Build components ──────────────────────────────────
       const components = new Map<string, ComponentDef>();
       if (input.components) {
@@ -179,23 +225,32 @@ export class ModelHandler implements ModelSpec {
           let interactive: boolean | undefined;
 
           for (const [propName, rawValue] of Object.entries(props)) {
+            // `interactive: true` is a meta-flag, not a property.
             if (propName === 'interactive') {
               if (typeof rawValue === 'boolean') {
                 interactive = rawValue;
               }
               continue;
             }
+            // `states:` is a nested map of state-name → property overrides.
             if (propName === 'states') {
               if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
                 for (const [stateName, stateProps] of Object.entries(rawValue as Record<string, unknown>)) {
                   if (!stateProps || typeof stateProps !== 'object' || Array.isArray(stateProps)) continue;
                   const overrides = new Map<string, ResolvedValue>();
                   for (const [sPropName, sRawValue] of Object.entries(stateProps as Record<string, unknown>)) {
-                    const resolved = resolveComponentValue(
-                      sRawValue,
-                      symbolTable,
-                      unresolvedRefs,
-                    );
+                    const validator = COMPONENT_SUB_TOKEN_VALIDATORS.get(sPropName);
+                    if (validator && typeof sRawValue === 'string') {
+                      const result = validator(sRawValue);
+                      if (!result.ok) {
+                        findings.push({
+                          severity: 'error',
+                          path: `components.${compName}.states.${stateName}.${sPropName}`,
+                          message: result.error ?? `Invalid value for '${sPropName}'.`,
+                        });
+                      }
+                    }
+                    const resolved = resolveComponentValue(sRawValue, symbolTable, unresolvedRefs);
                     overrides.set(sPropName, resolved);
                   }
                   states.set(stateName, overrides);
@@ -203,8 +258,35 @@ export class ModelHandler implements ModelSpec {
               }
               continue;
             }
-            const resolved = resolveComponentValue(rawValue, symbolTable, unresolvedRefs);
-            properties.set(propName, resolved);
+
+            // Validate the raw author input against the typed schema.
+            // Token references and resolution failures are not validated
+            // here — those are handled by the broken-ref rule.
+            const validator = COMPONENT_SUB_TOKEN_VALIDATORS.get(propName);
+            if (validator && typeof rawValue === 'string') {
+              const result = validator(rawValue);
+              if (!result.ok) {
+                findings.push({
+                  severity: 'error',
+                  path: `components.${compName}.${propName}`,
+                  message: result.error ?? `Invalid value for '${propName}'.`,
+                });
+              }
+            }
+
+            // `elevation: raised` (bare semantic name) → look up in the
+            // elevation map even though the author didn't write a {ref}.
+            if (propName === 'elevation' && typeof rawValue === 'string'
+                && !isTokenReference(rawValue) && !isValidColor(rawValue)
+                && !isParseableDimension(rawValue)) {
+              const resolved = symbolTable.get(`elevation.${rawValue.trim()}`);
+              if (resolved !== undefined) {
+                properties.set(propName, resolved);
+                continue;
+              }
+            }
+
+            properties.set(propName, resolveComponentValue(rawValue, symbolTable, unresolvedRefs));
           }
 
           // Build resolvedStates: base ⊕ state overrides
@@ -230,7 +312,10 @@ export class ModelHandler implements ModelSpec {
           typography,
           rounded,
           spacing,
+          elevation,
           components,
+          colorRamps,
+          colorPairs,
           symbolTable,
           sections: input.sections,
         },
@@ -243,7 +328,10 @@ export class ModelHandler implements ModelSpec {
           typography: new Map(),
           rounded: new Map(),
           spacing: new Map(),
+          elevation: new Map(),
           components: new Map(),
+          colorRamps: new Map(),
+          colorPairs: new Map(),
           symbolTable: new Map(),
         },
         findings: [
@@ -257,6 +345,163 @@ export class ModelHandler implements ModelSpec {
     }
   }
 }
+
+// ── Object-shaped color expansion (ramps and pairs) ────────────────
+
+interface ExpansionContext {
+  colors: Map<string, ResolvedColor>;
+  colorRamps: Map<string, RampDef>;
+  colorPairs: Map<string, PairDef>;
+  symbolTable: Map<string, ResolvedValue>;
+  findings: Finding[];
+}
+
+/**
+ * Expand an object-shaped color value (ramp or pair) into the flat colors map
+ * and the symbol table. Emits findings for malformed input or pair contrast
+ * floor violations. Unknown object shapes produce a recoverable error finding.
+ */
+function expandObjectColor(name: string, raw: RawRampDef | RawPairDef, ctx: ExpansionContext): void {
+  if (raw.type === 'ramp') {
+    expandRamp(name, raw, ctx);
+  } else if (raw.type === 'pair') {
+    expandPair(name, raw, ctx);
+  } else {
+    ctx.findings.push({
+      severity: 'error',
+      path: `colors.${name}`,
+      message: `Unknown color shape '${(raw as { type?: string }).type ?? 'object'}'. Expected 'ramp' or 'pair'.`,
+    });
+  }
+}
+
+function expandRamp(name: string, raw: RawRampDef, ctx: ExpansionContext): void {
+  if (typeof raw.anchor !== 'string' || !isValidColor(raw.anchor)) {
+    ctx.findings.push({
+      severity: 'error',
+      path: `colors.${name}.anchor`,
+      message: `'${raw.anchor}' is not a valid hex anchor. Expected a hex color code (e.g., #ffffff).`,
+    });
+    return;
+  }
+  const steps = raw.steps && raw.steps.length > 0 ? raw.steps : [...DEFAULT_RAMP_STEPS];
+  const stepHexes = generateRampSteps(raw.anchor, steps);
+
+  const stepColors = new Map<number, ResolvedColor>();
+  for (const [step, hex] of stepHexes) {
+    const resolved = parseColor(hex);
+    resolved.rampMember = { ramp: name, step };
+    stepColors.set(step, resolved);
+    ctx.colors.set(`${name}.${step}`, resolved);
+    ctx.symbolTable.set(`colors.${name}.${step}`, resolved);
+  }
+
+  // Anchor lives at the bare ramp name. Use the user's literal hex (avoids round-trip drift).
+  const anchorColor = parseColor(raw.anchor);
+  anchorColor.rampMember = { ramp: name, step: 500 };
+  if (raw.humanName) anchorColor.humanName = raw.humanName;
+  ctx.colors.set(name, anchorColor);
+  ctx.symbolTable.set(`colors.${name}`, anchorColor);
+
+  const ramp: RampDef = {
+    name,
+    anchor: anchorColor,
+    steps: stepColors,
+    pairs: new Map(),
+  };
+  if (raw.humanName) ramp.humanName = raw.humanName;
+  if (raw.description) ramp.description = raw.description;
+  ctx.colorRamps.set(name, ramp);
+
+  // Inline pair derivations: synthesize pair entries + flat M3-style aliases.
+  if (raw.pairs) {
+    for (const [pairKey, { bg, fg }] of Object.entries(raw.pairs)) {
+      const bgColor = stepColors.get(bg);
+      const fgColor = stepColors.get(fg);
+      if (!bgColor || !fgColor) {
+        ctx.findings.push({
+          severity: 'error',
+          path: `colors.${name}.pairs.${pairKey}`,
+          message: `Pair '${pairKey}' references step ${!bgColor ? bg : fg}, but the ramp does not declare that step.`,
+        });
+        continue;
+      }
+      ramp.pairs.set(pairKey, { bg, fg });
+
+      const pairName = `${name}-${pairKey}`;
+      const onPairName = `on-${name}-${pairKey}`;
+      // Pair entries are flat aliases for the underlying ramp steps; strip
+      // rampMember so the Tailwind/DTCG exporters and orphaned-tokens treat
+      // them as standalone pair members rather than ramp steps.
+      const { rampMember: _bgStep, ...bgRest } = bgColor;
+      const { rampMember: _fgStep, ...fgRest } = fgColor;
+      const containerEntry: ResolvedColor = { ...bgRest, pairRole: { pair: pairName, role: 'container' } };
+      const onContainerEntry: ResolvedColor = { ...fgRest, pairRole: { pair: pairName, role: 'on-container' } };
+
+      ctx.colors.set(pairName, containerEntry);
+      ctx.colors.set(onPairName, onContainerEntry);
+      ctx.symbolTable.set(`colors.${pairName}`, containerEntry);
+      ctx.symbolTable.set(`colors.${onPairName}`, onContainerEntry);
+
+      const pair: PairDef = {
+        name: pairName,
+        container: containerEntry,
+        onContainer: onContainerEntry,
+        minContrast: WCAG_AA_BODY,
+        derivedFromRamp: name,
+      };
+      ctx.colorPairs.set(pairName, pair);
+    }
+  }
+}
+
+function expandPair(name: string, raw: RawPairDef, ctx: ExpansionContext): void {
+  if (typeof raw.container !== 'string' || !isValidColor(raw.container)) {
+    ctx.findings.push({
+      severity: 'error',
+      path: `colors.${name}.container`,
+      message: `'${raw.container}' is not a valid hex color.`,
+    });
+    return;
+  }
+  if (typeof raw.onContainer !== 'string' || !isValidColor(raw.onContainer)) {
+    ctx.findings.push({
+      severity: 'error',
+      path: `colors.${name}.onContainer`,
+      message: `'${raw.onContainer}' is not a valid hex color.`,
+    });
+    return;
+  }
+
+  const minContrast = typeof raw.minContrast === 'number' ? raw.minContrast : WCAG_AA_BODY;
+  const containerColor = parseColor(raw.container);
+  const onContainerColor = parseColor(raw.onContainer);
+  containerColor.pairRole = { pair: name, role: 'container' };
+  onContainerColor.pairRole = { pair: name, role: 'on-container' };
+
+  // Dotted form: explicit access to either member.
+  ctx.colors.set(`${name}.container`, containerColor);
+  ctx.colors.set(`${name}.onContainer`, onContainerColor);
+  ctx.symbolTable.set(`colors.${name}.container`, containerColor);
+  ctx.symbolTable.set(`colors.${name}.onContainer`, onContainerColor);
+
+  // Flat aliases: the bare pair name resolves to the container, `on-<name>` to the
+  // on-container. Mirrors the M3-style naming used by ramp-derived pairs.
+  ctx.colors.set(name, containerColor);
+  ctx.colors.set(`on-${name}`, onContainerColor);
+  ctx.symbolTable.set(`colors.${name}`, containerColor);
+  ctx.symbolTable.set(`colors.on-${name}`, onContainerColor);
+
+  const pair: PairDef = {
+    name,
+    container: containerColor,
+    onContainer: onContainerColor,
+    minContrast,
+  };
+  ctx.colorPairs.set(name, pair);
+}
+
+const WCAG_AA_BODY = 4.5;
 
 // ── Pure utility functions ─────────────────────────────────────────
 

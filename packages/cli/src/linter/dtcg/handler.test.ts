@@ -14,7 +14,9 @@
 
 import { describe, test, expect } from 'bun:test';
 import { DtcgEmitterHandler } from './handler.js';
+import { ModelHandler } from '../model/handler.js';
 import type { ComponentDef, DesignSystemState, ResolvedColor, ResolvedDimension, ResolvedTypography, ResolvedValue } from '../model/spec.js';
+import type { ParsedDesignSystem } from '../parser/spec.js';
 
 function emptyState(overrides?: Partial<DesignSystemState>): DesignSystemState {
   return {
@@ -22,7 +24,10 @@ function emptyState(overrides?: Partial<DesignSystemState>): DesignSystemState {
     typography: new Map(),
     rounded: new Map(),
     spacing: new Map(),
+    elevation: new Map(),
     components: new Map(),
+    colorRamps: new Map(),
+    colorPairs: new Map(),
     symbolTable: new Map(),
     ...overrides,
   };
@@ -34,6 +39,10 @@ function makeColor(hex: string, r: number, g: number, b: number): ResolvedColor 
 
 function makeDim(value: number, unit: string): ResolvedDimension {
   return { type: 'dimension', value, unit };
+}
+
+function makeShadow(raw: string) {
+  return { type: 'shadow' as const, raw };
 }
 
 describe('DtcgEmitterHandler', () => {
@@ -170,6 +179,25 @@ describe('DtcgEmitterHandler', () => {
     expect(value['letterSpacing']).toEqual({ value: 0.5, unit: 'px' });
   });
 
+  test('elevation → DTCG shadow group with raw shadow strings', () => {
+    const state = emptyState({
+      elevation: new Map([
+        ['raised', makeShadow('0 4px 8px rgba(0,0,0,0.08)')],
+        ['modal', makeShadow('0 24px 48px rgba(0,0,0,0.16)')],
+      ]),
+    });
+
+    const result = handler.execute(state);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    const elevationGroup = result.data['elevation'] as Record<string, unknown>;
+    expect(elevationGroup['$type']).toBe('shadow');
+
+    const raised = elevationGroup['raised'] as Record<string, unknown>;
+    expect(raised['$value']).toBe('0 4px 8px rgba(0,0,0,0.08)');
+  });
+
   test('components → DTCG group with $extensions[design.md].states', () => {
     const primary = makeColor('#1a1c1e', 0x1A, 0x1C, 0x1E);
     const accent = makeColor('#ffffff', 255, 255, 255);
@@ -247,5 +275,59 @@ describe('DtcgEmitterHandler', () => {
     expect(value['fontWeight']).toBeUndefined();
     expect(value['lineHeight']).toBeUndefined();
     expect(value['letterSpacing']).toBeUndefined();
+  });
+
+  describe('ramps and pairs', () => {
+    const model = new ModelHandler();
+    function build(overrides: Partial<ParsedDesignSystem>): DesignSystemState {
+      return model.execute({ sourceMap: new Map(), ...overrides }).designSystem;
+    }
+
+    test('ramps emit as nested DTCG groups with vendor extension and anchor alias', () => {
+      const state = build({
+        colors: {
+          primary: { type: 'ramp', anchor: '#3b82f6', humanName: 'Sky' },
+        },
+      });
+      const result = handler.execute(state);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+
+      const colorGroup = result.data['color'] as Record<string, unknown>;
+      const primary = colorGroup['primary'] as Record<string, unknown>;
+      expect(primary['$type']).toBe('color');
+      const extensions = primary['$extensions'] as Record<string, Record<string, unknown>>;
+      expect(extensions['design.md']?.['type']).toBe('ramp');
+      expect(extensions['design.md']?.['humanName']).toBe('Sky');
+      expect(primary['500']).toBeDefined();
+      expect(primary['50']).toBeDefined();
+
+      const anchor = primary['anchor'] as Record<string, unknown>;
+      expect(anchor['$value']).toBe('{color.primary.500}');
+    });
+
+    test('standalone pairs emit container + onContainer with role extensions', () => {
+      const state = build({
+        colors: {
+          'surface-info': { type: 'pair', container: '#E0F2FE', onContainer: '#0C4A6E' },
+        },
+      });
+      const result = handler.execute(state);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+
+      const colorGroup = result.data['color'] as Record<string, unknown>;
+      const pairGroup = colorGroup['surface-info'] as Record<string, unknown>;
+      const ext = pairGroup['$extensions'] as Record<string, Record<string, unknown>>;
+      expect(ext['design.md']?.['type']).toBe('pair');
+
+      const container = pairGroup['container'] as Record<string, unknown>;
+      const containerExt = container['$extensions'] as Record<string, Record<string, unknown>>;
+      expect(containerExt['design.md']?.['role']).toBe('container');
+
+      const onContainer = pairGroup['onContainer'] as Record<string, unknown>;
+      const onContainerExt = onContainer['$extensions'] as Record<string, Record<string, unknown>>;
+      expect(onContainerExt['design.md']?.['role']).toBe('on-container');
+    });
   });
 });

@@ -721,6 +721,21 @@
       }
     }
   },
+  "elevation": {
+    "$type": "shadow",
+    "resting": {
+      "$value": "0 1px 2px rgba(133,83,0,0.06)"
+    },
+    "raised": {
+      "$value": "0 4px 12px rgba(133,83,0,0.10)"
+    },
+    "overlay": {
+      "$value": "0 12px 24px rgba(133,83,0,0.14)"
+    },
+    "modal": {
+      "$value": "0 24px 48px rgba(133,83,0,0.18)"
+    }
+  },
   "component": {
     "button-primary": {
       "backgroundColor": {
@@ -776,6 +791,9 @@
           "value": 24,
           "unit": "px"
         }
+      },
+      "transition": {
+        "$value": "opacity 150ms ease-out"
       },
       "$extensions": {
         "design.md": {
@@ -852,6 +870,9 @@
           "unit": "px"
         }
       },
+      "transition": {
+        "$value": "opacity 150ms ease-out"
+      },
       "$extensions": {
         "design.md": {
           "states": {
@@ -898,6 +919,17 @@
           "value": 24,
           "unit": "px"
         }
+      },
+      "gap": {
+        "$type": "dimension",
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        }
+      },
+      "shadow": {
+        "$type": "shadow",
+        "$value": "0 4px 12px rgba(133,83,0,0.10)"
       }
     },
     "card-walk-stat": {
@@ -938,6 +970,10 @@
           "value": 12,
           "unit": "px"
         }
+      },
+      "shadow": {
+        "$type": "shadow",
+        "$value": "0 1px 2px rgba(133,83,0,0.06)"
       }
     },
     "input-field": {
@@ -991,6 +1027,12 @@
           "unit": "px"
         }
       },
+      "border": {
+        "$value": "1px solid {colors.outline-variant}"
+      },
+      "iconSize": {
+        "$value": "auto"
+      },
       "$extensions": {
         "design.md": {
           "states": {
@@ -1009,7 +1051,16 @@
     },
     "list-item-walker": {
       "backgroundColor": {
-        "$value": "transparent"
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0,
+            0
+          ],
+          "hex": "#00000000"
+        }
       },
       "padding": {
         "$type": "dimension",
@@ -1024,6 +1075,9 @@
           "value": 0.75,
           "unit": "rem"
         }
+      },
+      "transition": {
+        "$value": "opacity 100ms ease-in"
       },
       "$extensions": {
         "design.md": {

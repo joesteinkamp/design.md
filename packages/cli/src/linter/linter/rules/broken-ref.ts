@@ -33,13 +33,15 @@ export function brokenRef(state: DesignSystemState): RuleFinding[] {
       });
     }
 
-    // Unknown component sub-tokens — base
+    // Unknown component sub-tokens — base.
+    // The hint message lists the full valid set so authors discover the
+    // current vocabulary without having to consult the spec.
     for (const [propName] of comp.properties) {
       if (!known.has(propName)) {
         findings.push({
           severity: 'warning',
           path: `components.${compName}.${propName}`,
-          message: `'${propName}' is not a recognized component sub-token. Valid sub-tokens: ${VALID_COMPONENT_SUB_TOKENS.join(', ')}.`,
+          message: `'${propName}' is not a recognized component sub-token. Recognized: ${VALID_COMPONENT_SUB_TOKENS.join(', ')}.`,
         });
       }
     }
