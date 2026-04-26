@@ -19,12 +19,14 @@ import type {
   ResolvedColor,
   ResolvedDimension,
   ResolvedTypography,
+  ResolvedShadow,
   ResolvedValue,
   ComponentDef,
   Finding,
 } from './spec.js';
 
 import { isValidColor, isParseableDimension, isTokenReference, parseDimensionParts } from './spec.js';
+import { COMPONENT_SUB_TOKEN_VALIDATORS } from '../component-validators.js';
 
 const MAX_REFERENCE_DEPTH = 10;
 
@@ -43,6 +45,7 @@ export class ModelHandler implements ModelSpec {
       const typography = new Map<string, ResolvedTypography>();
       const rounded = new Map<string, ResolvedDimension>();
       const spacing = new Map<string, ResolvedDimension>();
+      const elevation = new Map<string, ResolvedShadow>();
 
       // ── Phase 1: Resolve primitive tokens ──────────────────────────
       // Colors
@@ -118,6 +121,22 @@ export class ModelHandler implements ModelSpec {
         }
       }
 
+      // Elevation — semantic shadow tokens (resting / raised / overlay / modal).
+      // Values are CSS shadow strings; validation is generous to match the
+      // wide CSS shadow grammar.
+      if (input.elevation) {
+        for (const [name, raw] of Object.entries(input.elevation)) {
+          if (typeof raw !== 'string') continue;
+          if (isTokenReference(raw)) {
+            symbolTable.set(`elevation.${name}`, raw);
+          } else {
+            const shadow: ResolvedShadow = { type: 'shadow', raw };
+            elevation.set(name, shadow);
+            symbolTable.set(`elevation.${name}`, shadow);
+          }
+        }
+      }
+
       // ── Phase 2: Resolve chained color references ──────────────────
       // Iterate color entries that are still raw references and resolve them
       if (input.colors) {
@@ -168,6 +187,24 @@ export class ModelHandler implements ModelSpec {
         }
       }
 
+      // Resolve chained elevation references
+      if (input.elevation) {
+        for (const [name, raw] of Object.entries(input.elevation)) {
+          if (typeof raw === 'string' && isTokenReference(raw)) {
+            const resolved = resolveReference(symbolTable, raw.slice(1, -1), new Set());
+            if (
+              resolved !== null &&
+              typeof resolved === 'object' &&
+              'type' in resolved &&
+              resolved.type === 'shadow'
+            ) {
+              elevation.set(name, resolved as ResolvedShadow);
+              symbolTable.set(`elevation.${name}`, resolved);
+            }
+          }
+        }
+      }
+
       // ── Phase 3: Build components ──────────────────────────────────
       const components = new Map<string, ComponentDef>();
       if (input.components) {
@@ -176,6 +213,33 @@ export class ModelHandler implements ModelSpec {
           const unresolvedRefs: string[] = [];
 
           for (const [propName, rawValue] of Object.entries(props)) {
+            // Validate the raw author input against the typed schema.
+            // Token references and resolution failures are not validated
+            // here — those are handled by the broken-ref rule.
+            const validator = COMPONENT_SUB_TOKEN_VALIDATORS.get(propName);
+            if (validator && typeof rawValue === 'string') {
+              const result = validator(rawValue);
+              if (!result.ok) {
+                findings.push({
+                  severity: 'error',
+                  path: `components.${compName}.${propName}`,
+                  message: result.error ?? `Invalid value for '${propName}'.`,
+                });
+              }
+            }
+
+            // `elevation: raised` (bare semantic name) → look up in the
+            // elevation map even though the author didn't write a {ref}.
+            if (propName === 'elevation' && typeof rawValue === 'string'
+                && !isTokenReference(rawValue) && !isValidColor(rawValue)
+                && !isParseableDimension(rawValue)) {
+              const resolved = symbolTable.get(`elevation.${rawValue.trim()}`);
+              if (resolved !== undefined) {
+                properties.set(propName, resolved);
+                continue;
+              }
+            }
+
             if (isTokenReference(rawValue)) {
               const refPath = rawValue.slice(1, -1);
               const resolved = resolveReference(symbolTable, refPath, new Set());
@@ -206,6 +270,7 @@ export class ModelHandler implements ModelSpec {
           typography,
           rounded,
           spacing,
+          elevation,
           components,
           symbolTable,
           sections: input.sections,
@@ -219,6 +284,7 @@ export class ModelHandler implements ModelSpec {
           typography: new Map(),
           rounded: new Map(),
           spacing: new Map(),
+          elevation: new Map(),
           components: new Map(),
           symbolTable: new Map(),
         },
