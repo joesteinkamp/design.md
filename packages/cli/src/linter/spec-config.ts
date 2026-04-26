@@ -38,6 +38,11 @@ const PropertyDefSchema = z.object({
   description: z.string().optional(),
 });
 
+const ComponentKindSchema = z.object({
+  name: z.string(),
+  interactive: z.boolean(),
+});
+
 const ConfigSchema = z.object({
   version: z.string(),
   units: z.array(z.string()).min(1),
@@ -48,6 +53,8 @@ const ConfigSchema = z.object({
   typography_properties: z.array(PropertyDefSchema).min(1),
   component_sub_tokens: z.array(PropertyDefSchema).min(1),
   color_roles: z.array(z.string()).min(1),
+  component_kinds: z.array(ComponentKindSchema).min(1),
+  component_modifiers: z.array(z.string()).min(1),
   recommended_tokens: z.record(z.string(), z.array(z.string())),
   examples: z.object({
     colors: z.record(z.string(), z.string()),
@@ -109,6 +116,13 @@ export interface ComponentSubTokenDef {
   description?: string | undefined;
 }
 
+export interface ComponentKindDef {
+  /** Kind name (e.g., 'button', 'container'). */
+  name: string;
+  /** Whether components of this kind are interactive by default. */
+  interactive: boolean;
+}
+
 // ── Constant exports ─────────────────────────────────────────────────
 // These are eagerly initialized from the lazy singleton on first import.
 // The singleton cache ensures the YAML file is read exactly once.
@@ -130,6 +144,20 @@ export const COMPONENT_SUB_TOKENS: readonly ComponentSubTokenDef[] = config.comp
 
 /** Core color roles that every design system should define. */
 export const CORE_COLOR_ROLES = config.color_roles;
+
+/** Component kinds (button, container, etc.) and their default interactivity. */
+export const COMPONENT_KINDS: readonly ComponentKindDef[] = config.component_kinds;
+
+/** Set of valid kind names. */
+export const VALID_COMPONENT_KINDS: readonly string[] = COMPONENT_KINDS.map(k => k.name);
+
+/** Per-kind defaults, indexed by name. */
+export const KIND_DEFAULTS: Record<string, { interactive: boolean }> = Object.fromEntries(
+  COMPONENT_KINDS.map(k => [k.name, { interactive: k.interactive }])
+);
+
+/** Closed set of permitted name modifiers (the `-modifier` suffix in `noun-modifier`). */
+export const COMPONENT_MODIFIERS: readonly string[] = config.component_modifiers;
 
 /** Non-normative recommended token names, organized by category. */
 export const RECOMMENDED_TOKENS = config.recommended_tokens;
@@ -170,6 +198,8 @@ export interface SpecConfig {
   TYPOGRAPHY_PROPERTIES: typeof TYPOGRAPHY_PROPERTIES;
   COMPONENT_SUB_TOKENS: typeof COMPONENT_SUB_TOKENS;
   CORE_COLOR_ROLES: typeof CORE_COLOR_ROLES;
+  COMPONENT_KINDS: typeof COMPONENT_KINDS;
+  COMPONENT_MODIFIERS: typeof COMPONENT_MODIFIERS;
   RECOMMENDED_TOKENS: typeof RECOMMENDED_TOKENS;
   EXAMPLES: typeof EXAMPLES;
 }
@@ -182,6 +212,8 @@ export const SPEC_CONFIG: SpecConfig = {
   TYPOGRAPHY_PROPERTIES,
   COMPONENT_SUB_TOKENS,
   CORE_COLOR_ROLES,
+  COMPONENT_KINDS,
+  COMPONENT_MODIFIERS,
   RECOMMENDED_TOKENS,
   EXAMPLES,
 };

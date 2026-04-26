@@ -70,6 +70,22 @@ export interface RawPairDef {
 
 export type RawColorValue = string | RawRampDef | RawPairDef;
 
+/**
+ * A registry entry — the closed-world declaration that a component name is part
+ * of the design system. Adding an entry is a deliberate, reviewable act.
+ */
+export interface RawRegistryEntry {
+  name: string;
+  /** Component kind (button, input, container, etc.). Drives default behaviors. */
+  kind?: string;
+  /** Override the kind's default interactivity. */
+  interactive?: boolean;
+  /** Properties the matching definition must set. */
+  requiredProperties?: string[];
+  /** Pre-merge another entry's definition before resolving overrides. */
+  composes?: string;
+}
+
 /** Raw, unresolved parsed output — mirrors the YAML schema */
 export interface ParsedDesignSystem {
   name?: string | undefined;
@@ -85,6 +101,12 @@ export interface ParsedDesignSystem {
    */
   elevation?: Record<string, string> | undefined;
   components?: Record<string, Record<string, string>> | undefined;
+  /**
+   * Closed-world registry of component names. When present, every entry in
+   * `components` (the definitions) must correspond to a registry entry.
+   * Absent = open-world (back-compat) behavior.
+   */
+  componentRegistry?: RawRegistryEntry[] | undefined;
   sourceMap: Map<string, SourceLocation>;
   /** Markdown heading names found in the document (e.g., 'Colors', 'Typography') */
   sections?: string[] | undefined;
