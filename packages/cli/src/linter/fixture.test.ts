@@ -58,4 +58,39 @@ describe('Fixture Test', () => {
     // We expect at least the summary info
     expect(result.summary.infos).toBeGreaterThan(0);
   });
+
+  it('processes RAMPS_AND_PAIRS.md end-to-end with no errors', () => {
+    const path = join(import.meta.dir, 'fixtures', 'RAMPS_AND_PAIRS.md');
+    const content = readFileSync(path, 'utf-8');
+
+    const result = lint(content);
+
+    // The fixture is intentionally clean: no errors, no pair-contrast or
+    // mixed-pair-foreground warnings, and no missing humanName warnings.
+    const errors = result.findings.filter(d => d.severity === 'error');
+    expect(errors).toEqual([]);
+    expect(result.findings.some(d => d.message.includes('Pair'))).toBe(false);
+    expect(result.findings.some(d => d.message.includes("missing a 'humanName'"))).toBe(false);
+
+    // Ramp expansion populated steps and the inline-pair flat aliases.
+    const ds = result.designSystem;
+    expect(ds.colorRamps.get('primary')?.humanName).toBe('Ocean');
+    expect(ds.colors.get('primary.500')?.hex).toBe('#3b82f6');
+    expect(ds.colors.get('primary-container')).toBeDefined();
+    expect(ds.colors.get('on-primary-container')).toBeDefined();
+
+    // Standalone pair created both dotted members and hyphen aliases.
+    expect(ds.colorPairs.get('surface-info')).toBeDefined();
+    expect(ds.colors.get('surface-info')?.hex).toBe('#e0f2fe');
+    expect(ds.colors.get('on-surface-info')?.hex).toBe('#0c4a6e');
+
+    // Tailwind output groups the ramp under a nested object.
+    if (!result.tailwindConfig.success) throw new Error('Tailwind emit failed');
+    const colors = result.tailwindConfig.data.theme.extend.colors!;
+    const primary = colors['primary'] as Record<string, string>;
+    expect(primary['DEFAULT']).toBe('#3b82f6');
+    expect(primary['500']).toBe('#3b82f6');
+    expect(colors['surface-info']).toBe('#e0f2fe');
+    expect(colors['primary-container']).toBeDefined();
+  });
 });

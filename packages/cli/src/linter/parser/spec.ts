@@ -37,11 +37,44 @@ export interface SourceLocation {
   block: 'frontmatter' | number;
 }
 
+/**
+ * A ramp declaration: an anchor color plus a derived scale of steps.
+ * Steps are interpolated in OKLCH from the anchor toward white (lighter steps)
+ * and toward black (darker steps). The anchor occupies step 500 by default.
+ */
+export interface RawRampDef {
+  type: 'ramp';
+  anchor: string;
+  /** Optional human-readable name (e.g., "Boston Clay") used by prose validation. */
+  humanName?: string;
+  description?: string;
+  /** Reserved for future curves (apca, lightness-linear). Default: oklch. */
+  curve?: 'oklch';
+  /** Numeric steps to derive. Default: [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]. */
+  steps?: number[];
+  /** Inline derivation of pair tokens (e.g., container/on-container) from steps. */
+  pairs?: Record<string, { bg: number; fg: number }>;
+}
+
+/**
+ * A pair declaration: a container color and its paired foreground.
+ * The two members satisfy a minimum contrast invariant (`minContrast`).
+ */
+export interface RawPairDef {
+  type: 'pair';
+  container: string;
+  onContainer: string;
+  /** WCAG ratio floor. Default: 4.5 (AA body text). */
+  minContrast?: number;
+}
+
+export type RawColorValue = string | RawRampDef | RawPairDef;
+
 /** Raw, unresolved parsed output — mirrors the YAML schema */
 export interface ParsedDesignSystem {
   name?: string | undefined;
   description?: string | undefined;
-  colors?: Record<string, string> | undefined;
+  colors?: Record<string, RawColorValue> | undefined;
   typography?: Record<string, Record<string, string | number>> | undefined;
   rounded?: Record<string, string> | undefined;
   spacing?: Record<string, string> | undefined;
