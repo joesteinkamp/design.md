@@ -42,12 +42,18 @@ export interface DtcgToken {
   $type?: string;
   $value: DtcgColorValue | DtcgDimensionValue | DtcgTypographyValue | string | number;
   $description?: string;
+  /**
+   * DTCG vendor extensions. We use `design.md` as the namespace for ramp
+   * provenance, pair role, and human-readable anchor names.
+   */
+  $extensions?: Record<string, unknown>;
 }
 
 export interface DtcgGroup {
   $type?: string;
   $description?: string;
-  [key: string]: DtcgToken | DtcgGroup | string | undefined;
+  $extensions?: Record<string, unknown>;
+  [key: string]: DtcgToken | DtcgGroup | string | Record<string, unknown> | undefined;
 }
 
 /** The complete tokens.json output file. */

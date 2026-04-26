@@ -23,12 +23,18 @@ import { tokenSummaryRule } from './token-summary.js';
 import { missingSectionsRule } from './missing-sections.js';
 import { sectionOrderRule } from './section-order.js';
 import { missingTypographyRule } from './missing-typography.js';
+import { pairContrastRule } from './pair-contrast.js';
+import { mixedPairForegroundRule } from './mixed-pair-foreground.js';
+import { rampAnchorNamingRule } from './ramp-anchor-naming.js';
 
 /** The default set of lint rule descriptors, in order. */
 export const DEFAULT_RULE_DESCRIPTORS: RuleDescriptor[] = [
   brokenRefRule,
   missingPrimaryRule,
   contrastCheckRule,
+  pairContrastRule,
+  mixedPairForegroundRule,
+  rampAnchorNamingRule,
   orphanedTokensRule,
   tokenSummaryRule,
   missingSectionsRule,
@@ -58,4 +64,7 @@ export { tokenSummary } from './token-summary.js';
 export { missingSections } from './missing-sections.js';
 export { missingTypography } from './missing-typography.js';
 export { sectionOrder } from './section-order.js';
+export { pairContrast } from './pair-contrast.js';
+export { mixedPairForeground } from './mixed-pair-foreground.js';
+export { rampAnchorNaming } from './ramp-anchor-naming.js';
 export type { LintRule } from './types.js';

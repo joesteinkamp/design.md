@@ -14,7 +14,9 @@
 
 import { describe, test, expect } from 'bun:test';
 import { DtcgEmitterHandler } from './handler.js';
+import { ModelHandler } from '../model/handler.js';
 import type { DesignSystemState, ResolvedColor, ResolvedDimension, ResolvedTypography } from '../model/spec.js';
+import type { ParsedDesignSystem } from '../parser/spec.js';
 
 function emptyState(overrides?: Partial<DesignSystemState>): DesignSystemState {
   return {
@@ -23,6 +25,8 @@ function emptyState(overrides?: Partial<DesignSystemState>): DesignSystemState {
     rounded: new Map(),
     spacing: new Map(),
     components: new Map(),
+    colorRamps: new Map(),
+    colorPairs: new Map(),
     symbolTable: new Map(),
     ...overrides,
   };
@@ -190,5 +194,59 @@ describe('DtcgEmitterHandler', () => {
     expect(value['fontWeight']).toBeUndefined();
     expect(value['lineHeight']).toBeUndefined();
     expect(value['letterSpacing']).toBeUndefined();
+  });
+
+  describe('ramps and pairs', () => {
+    const model = new ModelHandler();
+    function build(overrides: Partial<ParsedDesignSystem>): DesignSystemState {
+      return model.execute({ sourceMap: new Map(), ...overrides }).designSystem;
+    }
+
+    test('ramps emit as nested DTCG groups with vendor extension and anchor alias', () => {
+      const state = build({
+        colors: {
+          primary: { type: 'ramp', anchor: '#3b82f6', humanName: 'Sky' },
+        },
+      });
+      const result = handler.execute(state);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+
+      const colorGroup = result.data['color'] as Record<string, unknown>;
+      const primary = colorGroup['primary'] as Record<string, unknown>;
+      expect(primary['$type']).toBe('color');
+      const extensions = primary['$extensions'] as Record<string, Record<string, unknown>>;
+      expect(extensions['design.md']?.['type']).toBe('ramp');
+      expect(extensions['design.md']?.['humanName']).toBe('Sky');
+      expect(primary['500']).toBeDefined();
+      expect(primary['50']).toBeDefined();
+
+      const anchor = primary['anchor'] as Record<string, unknown>;
+      expect(anchor['$value']).toBe('{color.primary.500}');
+    });
+
+    test('standalone pairs emit container + onContainer with role extensions', () => {
+      const state = build({
+        colors: {
+          'surface-info': { type: 'pair', container: '#E0F2FE', onContainer: '#0C4A6E' },
+        },
+      });
+      const result = handler.execute(state);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+
+      const colorGroup = result.data['color'] as Record<string, unknown>;
+      const pairGroup = colorGroup['surface-info'] as Record<string, unknown>;
+      const ext = pairGroup['$extensions'] as Record<string, Record<string, unknown>>;
+      expect(ext['design.md']?.['type']).toBe('pair');
+
+      const container = pairGroup['container'] as Record<string, unknown>;
+      const containerExt = container['$extensions'] as Record<string, Record<string, unknown>>;
+      expect(containerExt['design.md']?.['role']).toBe('container');
+
+      const onContainer = pairGroup['onContainer'] as Record<string, unknown>;
+      const onContainerExt = onContainer['$extensions'] as Record<string, Record<string, unknown>>;
+      expect(onContainerExt['design.md']?.['role']).toBe('on-container');
+    });
   });
 });

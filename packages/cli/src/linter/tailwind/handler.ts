@@ -37,11 +37,28 @@ export class TailwindEmitterHandler implements TailwindEmitterSpec {
     };
   }
 
-  private mapColors(state: DesignSystemState): Record<string, string> {
-    const result: Record<string, string> = {};
+  private mapColors(state: DesignSystemState): Record<string, string | Record<string, string>> {
+    const result: Record<string, string | Record<string, string>> = {};
+
+    // Ramps emit as nested objects: { DEFAULT: '...', '50': '...', '500': '...', ... }
+    // The flat colors map carries every step plus the anchor; group them by ramp.
+    for (const [rampName, ramp] of state.colorRamps) {
+      const group: Record<string, string> = { DEFAULT: ramp.anchor.hex };
+      for (const [step, color] of [...ramp.steps].sort(([a], [b]) => a - b)) {
+        group[String(step)] = color.hex;
+      }
+      result[rampName] = group;
+    }
+
+    // Flat colors and pair members emit as top-level strings. Skip step entries
+    // (already nested under their ramp), the bare anchor (already in group), and
+    // dotted standalone-pair members (encoded via hyphen flat aliases below).
     for (const [name, color] of state.colors) {
+      if (color.rampMember) continue;
+      if (color.pairRole && name.includes('.')) continue;
       result[name] = color.hex;
     }
+
     return result;
   }
 
