@@ -40,6 +40,42 @@ export interface ResolvedColor {
   a?: number;
   /** WCAG relative luminance */
   luminance: number;
+  /** If this color was derived as a ramp step, its provenance. */
+  rampMember?: { ramp: string; step: number };
+  /** If this color is a pair member, the pair name and its role. */
+  pairRole?: { pair: string; role: 'container' | 'on-container' };
+  /** Optional human-readable name (e.g., "Boston Clay") attached to ramp anchors. */
+  humanName?: string;
+}
+
+/**
+ * A ramp's structural metadata after resolution. Step values are also stored
+ * flat in `state.colors` keyed as `<rampName>.<step>`; this map is for rules
+ * and exporters that need the original grouping.
+ */
+export interface RampDef {
+  name: string;
+  anchor: ResolvedColor;
+  humanName?: string;
+  description?: string;
+  steps: Map<number, ResolvedColor>;
+  /** Inline pair derivations declared on the ramp (e.g., container → step 100/800). */
+  pairs: Map<string, { bg: number; fg: number }>;
+}
+
+/**
+ * A pair's structural metadata. Members are also stored flat in `state.colors`
+ * keyed as `<pairName>.container` / `<pairName>.onContainer`. For ramp-inline
+ * pairs, additional flat aliases `<rampName>-<pairKey>` and `on-<rampName>-<pairKey>`
+ * are also synthesized for back-compat with M3-style naming.
+ */
+export interface PairDef {
+  name: string;
+  container: ResolvedColor;
+  onContainer: ResolvedColor;
+  minContrast: number;
+  /** True if this pair was derived inline on a ramp. */
+  derivedFromRamp?: string;
 }
 
 export interface ResolvedDimension {
@@ -96,6 +132,12 @@ export const VALID_COMPONENT_SUB_TOKENS = _VALID_COMPONENT_SUB_TOKENS;
 export interface DesignSystemState {
   name?: string | undefined;
   description?: string | undefined;
+  /**
+   * Flat color map. Anchors live at `<name>`; ramp steps at `<name>.<step>`;
+   * pair members at `<pairName>.container` / `<pairName>.onContainer`; and
+   * inline-pair flat aliases at `<rampName>-<pairKey>` / `on-<rampName>-<pairKey>`.
+   * Each entry's provenance (if any) is on the `ResolvedColor` itself.
+   */
   colors: Map<string, ResolvedColor>;
   typography: Map<string, ResolvedTypography>;
   rounded: Map<string, ResolvedDimension>;
@@ -106,6 +148,10 @@ export interface DesignSystemState {
    */
   elevation: Map<string, ResolvedShadow>;
   components: Map<string, ComponentDef>;
+  /** Ramp definitions, keyed by ramp name. */
+  colorRamps: Map<string, RampDef>;
+  /** Pair definitions, keyed by pair name. */
+  colorPairs: Map<string, PairDef>;
   /** Flat lookup: "colors.primary" → ResolvedColor */
   symbolTable: Map<string, ResolvedValue>;
   /** Markdown heading names found in the document */

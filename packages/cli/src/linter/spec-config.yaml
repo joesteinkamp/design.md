@@ -108,6 +108,31 @@ color_roles:
   - tertiary
   - neutral
 
+# Color value shapes
+# ──────────────────
+# In addition to a flat hex (`primary: "#1A1C1E"`), `colors` accepts two
+# object-shaped forms that the model expands into flat tokens:
+#
+#   primary:                              # ramp: derives 50/100/.../900 in OKLCH
+#     type: ramp
+#     anchor: "#1A1C1E"
+#     humanName: "Boston Clay"
+#     description: "Driver for interaction."
+#     steps: [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]   # optional
+#     pairs:                              # optional inline pair derivations
+#       container: { bg: 100, fg: 800 }   # synthesizes primary-container / on-primary-container
+#
+#   surface-info:                         # pair: foreground/background bound together
+#     type: pair
+#     container:    "#E0F2FE"
+#     onContainer:  "#0C4A6E"
+#     minContrast:  4.5                   # WCAG AA body; 7 for AAA
+#
+# References resolve in dotted form (`{colors.primary.500}`,
+# `{colors.surface-info.container}`) and via flat aliases (`{colors.primary}`
+# for the anchor, `{colors.surface-info}` for the container, `{colors.on-surface-info}`
+# for the on-container, `{colors.primary-container}` for ramp-derived pairs).
+
 recommended_tokens:
   colors:
     - primary

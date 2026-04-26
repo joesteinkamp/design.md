@@ -17,8 +17,11 @@ import type { Config } from 'tailwindcss';
 import type { DesignSystemState } from '../model/spec.js';
 
 // ── TAILWIND CONFIG SCHEMA ──────────────────────────────────────────
+// Colors can be flat strings (`primary: "#1a1c1e"`) or nested ramp/pair
+// objects (`primary: { DEFAULT: "...", "500": "...", ... }`). Tailwind
+// natively understands both forms.
 export const TailwindThemeExtendSchema = z.object({
-  colors: z.record(z.string()).optional(),
+  colors: z.record(z.union([z.string(), z.record(z.string())])).optional(),
   fontFamily: z.record(z.array(z.string())).optional(),
   fontSize: z.record(z.tuple([z.string(), z.record(z.string())])).optional(),
   borderRadius: z.record(z.string()).optional(),

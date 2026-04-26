@@ -27,12 +27,18 @@ import { opacityStackingRule } from './opacity-stacking.js';
 import { animatingLayoutPropertyRule } from './animating-layout-property.js';
 import { elevationWithoutSemanticsRule } from './elevation-without-semantics.js';
 import { tripleSeparationRule } from './triple-separation.js';
+import { pairContrastRule } from './pair-contrast.js';
+import { mixedPairForegroundRule } from './mixed-pair-foreground.js';
+import { rampAnchorNamingRule } from './ramp-anchor-naming.js';
 
 /** The default set of lint rule descriptors, in order. */
 export const DEFAULT_RULE_DESCRIPTORS: RuleDescriptor[] = [
   brokenRefRule,
   missingPrimaryRule,
   contrastCheckRule,
+  pairContrastRule,
+  mixedPairForegroundRule,
+  rampAnchorNamingRule,
   orphanedTokensRule,
   tokenSummaryRule,
   missingSectionsRule,
@@ -70,4 +76,7 @@ export { opacityStacking } from './opacity-stacking.js';
 export { animatingLayoutProperty } from './animating-layout-property.js';
 export { elevationWithoutSemantics } from './elevation-without-semantics.js';
 export { tripleSeparation } from './triple-separation.js';
+export { pairContrast } from './pair-contrast.js';
+export { mixedPairForeground } from './mixed-pair-foreground.js';
+export { rampAnchorNaming } from './ramp-anchor-naming.js';
 export type { LintRule } from './types.js';
