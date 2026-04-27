@@ -39,4 +39,27 @@ describe('contrastCheck', () => {
     const contrastWarnings = contrastCheck(state).filter(d => d.message.includes('contrast'));
     expect(contrastWarnings.length).toBe(0);
   });
+
+  it('handles oklch colors without warning when contrast is high', () => {
+    const state = buildState({
+      colors: { black: 'oklch(0 0 0)', white: 'oklch(1 0 0)' },
+      components: {
+        'button-good': { backgroundColor: '{colors.black}', textColor: '{colors.white}' },
+      },
+    });
+    const contrastWarnings = contrastCheck(state).filter(d => d.message.includes('contrast'));
+    expect(contrastWarnings.length).toBe(0);
+  });
+
+  it('warns on low-contrast oklch pair', () => {
+    const state = buildState({
+      colors: { paleA: 'oklch(0.95 0 0)', paleB: 'oklch(0.92 0 0)' },
+      components: {
+        'button-bad': { backgroundColor: '{colors.paleA}', textColor: '{colors.paleB}' },
+      },
+    });
+    const findings = contrastCheck(state);
+    expect(findings.length).toBe(1);
+    expect(findings[0]!.message).toMatch(/contrast/);
+  });
 });

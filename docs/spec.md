@@ -59,7 +59,14 @@ components:
 
 The `<scale-level>` placeholder represents a named level in a sizing or spacing scale. Common level names include `xs`, `sm`, `md`, `lg`, `xl`, and `full`. Any descriptive string key is valid.
 
-**Color**: A color value must start with "#" followed by a hex color code in the SRGB color space.
+**Color**: A color value is any CSS color notation. The recommended forms are:
+
+* **Hex** (sRGB): `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`
+* **`rgb()` / `rgba()`** and **`hsl()` / `hsla()`**
+* **`oklch()`**, **`oklab()`**, **`lab()`** for perceptually uniform color
+* **`color(display-p3 …)`** for wide-gamut display colors
+
+The linter computes WCAG contrast in sRGB; wide-gamut inputs are converted and clamped for that purpose, but emitters preserve the original notation when the target supports it (e.g., Tailwind v4).
 
 - `fontFamily` (string)
 - `fontSize` (Dimension)
@@ -317,6 +324,13 @@ Each component has a set of properties that are themselves design tokens:
 - size: \<Dimension\>
 - height: \<Dimension\>
 - width: \<Dimension\>
+- gap: \<Dimension\> - Gap between child elements (CSS `gap`).
+- border: \<string\> - CSS `border` shorthand (width style color), e.g. `1px solid {colors.neutral-30}`.
+- outline: \<string\> - CSS `outline` shorthand. Useful for focus rings.
+- opacity: \<number\> - Numeric opacity from 0 to 1.
+- boxShadow: \<string\> - CSS `box-shadow` value. Multiple shadows may be comma-separated.
+- transition: \<string\> - CSS `transition` shorthand, e.g. `background-color 150ms ease`.
+- backdropFilter: \<string\> - CSS `backdrop-filter` value, e.g. `blur(8px)`.
 
 ## Do's and Don'ts
 

@@ -38,9 +38,12 @@ export class TailwindEmitterHandler implements TailwindEmitterSpec {
   }
 
   private mapColors(state: DesignSystemState): Record<string, string> {
+    // Tailwind v4 accepts modern CSS color functions natively, so we round-trip
+    // the original notation when present and fall back to sRGB hex for legacy
+    // hex tokens. This preserves wide-gamut intent for oklch / lab / display-p3.
     const result: Record<string, string> = {};
     for (const [name, color] of state.colors) {
-      result[name] = color.hex;
+      result[name] = color.format === 'hex' ? color.hex : color.raw;
     }
     return result;
   }

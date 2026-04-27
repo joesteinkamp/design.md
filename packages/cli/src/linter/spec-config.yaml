@@ -76,6 +76,27 @@ component_sub_tokens:
     type: Dimension
   - name: width
     type: Dimension
+  - name: gap
+    type: Dimension
+    description: "Gap between child elements (CSS `gap`)."
+  - name: border
+    type: string
+    description: "CSS `border` shorthand (width style color), e.g. `1px solid {colors.neutral-30}`."
+  - name: outline
+    type: string
+    description: "CSS `outline` shorthand. Useful for focus rings."
+  - name: opacity
+    type: number
+    description: "Numeric opacity from 0 to 1."
+  - name: boxShadow
+    type: string
+    description: "CSS `box-shadow` value. Multiple shadows may be comma-separated."
+  - name: transition
+    type: string
+    description: "CSS `transition` shorthand, e.g. `background-color 150ms ease`."
+  - name: backdropFilter
+    type: string
+    description: "CSS `backdrop-filter` value, e.g. `blur(8px)`."
 
 color_roles:
   - primary
