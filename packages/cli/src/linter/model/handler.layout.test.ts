@@ -69,6 +69,31 @@ describe('ModelHandler — layout (breakpoints, grid, layoutRules, templates, pa
     expect(result.designSystem.layoutRules?.formFieldWidth?.value).toBe(480);
   });
 
+  it('accepts a valid density descriptor and surfaces it in the symbol table', () => {
+    const result = build({
+      layoutRules: { density: 'balanced' },
+    });
+    expect(result.designSystem.layoutRules?.density).toBe('balanced');
+    expect(result.designSystem.symbolTable.get('layoutRules.density')).toBe('balanced');
+    expect(result.findings.some(f => f.path === 'layoutRules.density')).toBe(false);
+  });
+
+  it.each(['airy', 'balanced', 'dense'])('accepts %s as a density value', (density: string) => {
+    const result = build({ layoutRules: { density } });
+    expect(result.designSystem.layoutRules?.density).toBe(density);
+  });
+
+  it('flags an unknown density value', () => {
+    const result = build({
+      layoutRules: { density: 'comfortable' },
+    });
+    const finding = result.findings.find(f => f.path === 'layoutRules.density');
+    expect(finding).toBeDefined();
+    expect(finding?.severity).toBe('error');
+    expect(finding?.message).toMatch(/airy, balanced, dense/);
+    expect(result.designSystem.layoutRules?.density).toBeUndefined();
+  });
+
   it('validates that requiredRegions ⊆ regions', () => {
     const result = build({
       templates: {

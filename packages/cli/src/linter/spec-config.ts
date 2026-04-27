@@ -106,6 +106,7 @@ const ConfigSchema = z.object({
   title_case_minor_words: z.array(z.string()).min(1),
   well_known_themes: z.array(z.string()).min(1),
   breakpoint_philosophies: z.array(z.string()).min(1),
+  density_values: z.array(z.string()).min(1),
   breakpoint_keys: z.array(z.string()).min(1),
   well_known_regions: z.array(z.string()).min(1),
   recommended_tokens: z.record(z.string(), z.array(z.string())),
@@ -247,6 +248,14 @@ export const BREAKPOINT_PHILOSOPHIES: readonly string[] = config.breakpoint_phil
 export type BreakpointPhilosophy = (typeof BREAKPOINT_PHILOSOPHIES)[number];
 
 /**
+ * Allowed values for `layoutRules.density`. Density is an informational
+ * descriptor of how tightly the design system packs information; exporters
+ * may use it to scale spacing tokens, the linter only validates the enum.
+ */
+export const DENSITY_VALUES: readonly string[] = config.density_values;
+export type Density = (typeof DENSITY_VALUES)[number];
+
+/**
  * Conventional breakpoint key order (sm → 2xl). Authors may declare additional
  * keys; `breakpoint-monotonicity` validates that values increase across this
  * canonical sequence, ignoring any extra (unknown) keys.
@@ -353,6 +362,7 @@ export interface SpecConfig {
   CASING_VALUES: typeof CASING_VALUES;
   CASING_SURFACES: typeof CASING_SURFACES;
   BREAKPOINT_PHILOSOPHIES: typeof BREAKPOINT_PHILOSOPHIES;
+  DENSITY_VALUES: typeof DENSITY_VALUES;
   BREAKPOINT_KEYS: typeof BREAKPOINT_KEYS;
   WELL_KNOWN_REGIONS: typeof WELL_KNOWN_REGIONS;
   RECOMMENDED_TOKENS: typeof RECOMMENDED_TOKENS;
@@ -377,6 +387,7 @@ export const SPEC_CONFIG: SpecConfig = {
   CASING_VALUES,
   CASING_SURFACES,
   BREAKPOINT_PHILOSOPHIES,
+  DENSITY_VALUES,
   BREAKPOINT_KEYS,
   WELL_KNOWN_REGIONS,
   RECOMMENDED_TOKENS,

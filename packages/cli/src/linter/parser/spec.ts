@@ -120,11 +120,13 @@ export interface RawGridDef {
 /**
  * Raw `layoutRules:` block — the readable-measure / vertical-rhythm /
  * form-field-width primitives. Values are Dimension strings (or token refs).
+ * `density` is a closed-enum descriptor (`airy | balanced | dense`).
  */
 export interface RawLayoutRulesDef {
   contentMaxWidth?: string;
   stackSpacing?: string;
   formFieldWidth?: string;
+  density?: string;
 }
 
 /**

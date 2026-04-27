@@ -228,7 +228,7 @@ Off-grid is acceptable for documented exceptions only — full-bleed imagery, mo
 
 ### Readable measure
 
-Body prose stays under `layoutRules.contentMaxWidth` (≈ 60–80 characters per line). Never let prose run the full width of the viewport on desktop. `layoutRules.stackSpacing` is the default vertical rhythm between blocks; `layoutRules.formFieldWidth` is the canonical width for text inputs.
+Body prose stays under `layoutRules.contentMaxWidth` (≈ 60–80 characters per line). Never let prose run the full width of the viewport on desktop. `layoutRules.stackSpacing` is the default vertical rhythm between blocks; `layoutRules.formFieldWidth` is the canonical width for text inputs. `layoutRules.density` is an informational descriptor — one of `airy`, `balanced`, or `dense` — that captures how tightly the design system packs information; exporters may use it to scale spacing tokens, but the linter only validates that the value is part of the closed set.
 
 {layoutRulesExample()}
 

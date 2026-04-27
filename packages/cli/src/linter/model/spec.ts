@@ -314,12 +314,15 @@ export interface GridState {
 /**
  * Resolved layout-rule primitives. `contentMaxWidth` enforces a readable
  * measure (~60–80 char) for body prose; `stackSpacing` is the default
- * vertical rhythm; `formFieldWidth` is the canonical form-field width.
+ * vertical rhythm; `formFieldWidth` is the canonical form-field width;
+ * `density` is an informational descriptor (`airy | balanced | dense`)
+ * exporters may use to scale spacing.
  */
 export interface LayoutRulesState {
   contentMaxWidth?: ResolvedDimension;
   stackSpacing?: ResolvedDimension;
   formFieldWidth?: ResolvedDimension;
+  density?: string;
 }
 
 /**

@@ -56,7 +56,7 @@ import {
 import { parseColorString } from './color.js';
 import { COMPONENT_SUB_TOKEN_VALIDATORS } from '../component-validators.js';
 import { generateRampSteps, DEFAULT_RAMP_STEPS } from './color-ramp.js';
-import { ICON_LIBRARIES, KIND_DEFAULTS, BASE_THEME_NAME, VOICE_AXES, VOICE_PERSON, CASING_VALUES, CASING_SURFACES, BREAKPOINT_PHILOSOPHIES } from '../spec-config.js';
+import { ICON_LIBRARIES, KIND_DEFAULTS, BASE_THEME_NAME, VOICE_AXES, VOICE_PERSON, CASING_VALUES, CASING_SURFACES, BREAKPOINT_PHILOSOPHIES, DENSITY_VALUES } from '../spec-config.js';
 
 const MAX_REFERENCE_DEPTH = 10;
 
@@ -1852,6 +1852,24 @@ function parseLayoutRules(
   if (ffw) {
     out.formFieldWidth = ffw;
     symbolTable.set('layoutRules.formFieldWidth', ffw);
+  }
+  if (raw.density !== undefined) {
+    if (typeof raw.density !== 'string') {
+      findings.push({
+        severity: 'error',
+        path: 'layoutRules.density',
+        message: `layoutRules.density must be a string (one of: ${DENSITY_VALUES.join(', ')}).`,
+      });
+    } else if (!(DENSITY_VALUES as readonly string[]).includes(raw.density)) {
+      findings.push({
+        severity: 'error',
+        path: 'layoutRules.density',
+        message: `layoutRules.density must be one of: ${DENSITY_VALUES.join(', ')} (got '${raw.density}').`,
+      });
+    } else {
+      out.density = raw.density;
+      symbolTable.set('layoutRules.density', raw.density);
+    }
   }
   return out;
 }

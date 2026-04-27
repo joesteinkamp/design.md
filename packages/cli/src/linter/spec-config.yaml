@@ -134,6 +134,15 @@ breakpoint_philosophies:
   - mobile-first
   - desktop-first
 
+# Allowed values for `layoutRules.density`. Density is an informational
+# descriptor of how tightly the design system packs information per screen.
+# Exporters may use it to scale spacing tokens; the linter only validates
+# that the value is one of the closed set below.
+density_values:
+  - airy
+  - balanced
+  - dense
+
 # Conventional breakpoint key order (sm → 2xl). Informational — authors may
 # add extra keys, but `breakpoint-monotonicity` reads this order to validate
 # value progression.
@@ -519,6 +528,7 @@ examples:
     contentMaxWidth: 720px
     stackSpacing: "{spacing.lg}"
     formFieldWidth: 480px
+    density: balanced
   templates:
     marketing:
       regions: [header, hero, sections, cta, footer]
