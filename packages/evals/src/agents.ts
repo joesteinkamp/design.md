@@ -112,16 +112,150 @@ export const offBrandMockAgent: Agent = {
   },
 };
 
-/**
- * Real LLM agent. Wire in @anthropic-ai/sdk (or any SDK) here.
- * The system prompt should instruct the model to honor the provided context
- * and emit only HTML.
- */
-export const claudeAgent: Agent = {
-  id: 'claude',
-  async render(_task, _context) {
-    throw new Error(
-      'claudeAgent: not wired. Add @anthropic-ai/sdk and replace this body with a messages.create call.',
-    );
-  },
-};
+// ── Real-model agents ─────────────────────────────────────────────
+// All three lazy-load their SDK so the default eval (mock-only) does not
+// require any provider SDK to be present at import time.
+
+const SYSTEM_PROMPT =
+  'You are a UI engineer. Use only the design system provided in <design_system>. Output only a complete self-contained HTML document with inline CSS — no external resources, no markdown fences, no commentary.';
+
+function buildUserPrompt(taskPrompt: string, context: string): string {
+  return `<design_system>\n${context}\n</design_system>\n\n${taskPrompt}`;
+}
+
+function stripMarkdownFences(text: string): string {
+  return text.replace(/^```(?:html)?\s*/i, '').replace(/```\s*$/i, '').trim();
+}
+
+interface ProviderModelOverride {
+  /** Override the default model id. */
+  model?: string;
+}
+
+let anthropicClientPromise: Promise<any> | undefined;
+let openaiClientPromise: Promise<any> | undefined;
+let geminiClientPromise: Promise<any> | undefined;
+
+async function getAnthropic(): Promise<any> {
+  if (!anthropicClientPromise) {
+    anthropicClientPromise = (async () => {
+      const mod = await import('@anthropic-ai/sdk');
+      const Anthropic = (mod as any).default ?? (mod as any).Anthropic;
+      return new Anthropic();
+    })();
+  }
+  return anthropicClientPromise;
+}
+
+async function getOpenAI(): Promise<any> {
+  if (!openaiClientPromise) {
+    openaiClientPromise = (async () => {
+      const mod = await import('openai');
+      const OpenAI = (mod as any).default ?? (mod as any).OpenAI;
+      return new OpenAI();
+    })();
+  }
+  return openaiClientPromise;
+}
+
+async function getGemini(): Promise<any> {
+  if (!geminiClientPromise) {
+    geminiClientPromise = (async () => {
+      const mod = await import('@google/genai');
+      const GoogleGenAI = (mod as any).GoogleGenAI;
+      const apiKey = process.env['GEMINI_API_KEY'] ?? process.env['GOOGLE_API_KEY'];
+      return new GoogleGenAI({ apiKey });
+    })();
+  }
+  return geminiClientPromise;
+}
+
+/** Render via Anthropic Claude. Requires `ANTHROPIC_API_KEY`. */
+export function makeClaudeAgent(opts: ProviderModelOverride = {}): Agent {
+  const model = opts.model ?? 'claude-sonnet-4-6';
+  return {
+    id: `claude:${model}`,
+    async render(task, context) {
+      const client = await getAnthropic();
+      const message = await client.messages.create({
+        model,
+        max_tokens: 4096,
+        system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `<design_system>\n${context}\n</design_system>`,
+                cache_control: { type: 'ephemeral' },
+              },
+              { type: 'text', text: task.prompt },
+            ],
+          },
+        ],
+      });
+      const text = (message.content ?? [])
+        .filter((b: any) => b.type === 'text')
+        .map((b: any) => b.text as string)
+        .join('');
+      return stripMarkdownFences(text);
+    },
+  };
+}
+
+/** Render via OpenAI. Requires `OPENAI_API_KEY`. */
+export function makeOpenAIAgent(opts: ProviderModelOverride = {}): Agent {
+  const model = opts.model ?? 'gpt-4o';
+  return {
+    id: `openai:${model}`,
+    async render(task, context) {
+      const client = await getOpenAI();
+      const completion = await client.chat.completions.create({
+        model,
+        max_completion_tokens: 4096,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: buildUserPrompt(task.prompt, context) },
+        ],
+      });
+      const text = completion.choices?.[0]?.message?.content ?? '';
+      return stripMarkdownFences(text);
+    },
+  };
+}
+
+/** Render via Google Gemini. Requires `GEMINI_API_KEY` or `GOOGLE_API_KEY`. */
+export function makeGeminiAgent(opts: ProviderModelOverride = {}): Agent {
+  const model = opts.model ?? 'gemini-2.5-flash';
+  return {
+    id: `gemini:${model}`,
+    async render(task, context) {
+      const client = await getGemini();
+      const response = await client.models.generateContent({
+        model,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          maxOutputTokens: 4096,
+        },
+        contents: [{ role: 'user', parts: [{ text: buildUserPrompt(task.prompt, context) }] }],
+      });
+      const text =
+        typeof response.text === 'string'
+          ? response.text
+          : (response.candidates?.[0]?.content?.parts ?? [])
+              .map((p: any) => p.text ?? '')
+              .join('');
+      return stripMarkdownFences(text);
+    },
+  };
+}
+
+/** Default Claude agent at the canonical model. */
+export const claudeAgent = makeClaudeAgent();
+
+/** Default OpenAI agent at the canonical model. */
+export const openaiAgent = makeOpenAIAgent();
+
+/** Default Gemini agent at the canonical model. */
+export const geminiAgent = makeGeminiAgent();

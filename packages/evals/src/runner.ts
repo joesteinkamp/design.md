@@ -36,6 +36,8 @@ export interface RunOptions {
   weights?: ScoreWeights;
   /** When set, screenshots and the JSON report are written under this directory. */
   reportsDir?: string;
+  /** Vision-judge configuration. Only consulted when `layers.vision === true`. */
+  vision?: import('./vision.js').VisionOptions;
 }
 
 const DEFAULT_LAYERS: LayerToggles = {
@@ -73,6 +75,7 @@ export async function run(options: RunOptions): Promise<Report> {
             layers,
             weights,
             reportsDir: options.reportsDir,
+            visionOptions: options.vision,
             cellId: `${design.id}-${task.id}-${format}-${agent.id}`,
           });
           runs.push({
@@ -105,6 +108,7 @@ interface CellInput {
   layers: LayerToggles;
   weights: ScoreWeights;
   reportsDir?: string | undefined;
+  visionOptions?: import('./vision.js').VisionOptions | undefined;
   cellId: string;
 }
 
@@ -149,7 +153,7 @@ async function scoreCell(input: CellInput): Promise<Omit<RunRecord, 'designId' |
     }
     if (input.layers.vision) {
       const { scoreVision } = await import('./vision.js');
-      const v = await scoreVision(png, input.parsed, input.task);
+      const v = await scoreVision(png, input.parsed, input.task, input.visionOptions);
       partial.visionScore = v.score;
       out.visionRationale = v.rationale;
     }

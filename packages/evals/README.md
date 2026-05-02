@@ -72,10 +72,14 @@ Aggregating across runs gives a single mean score per format. **The DESIGN.md hy
 ## Layer flags
 
 ```bash
-bun run packages/evals/src/index.ts                              # default: copy + semantic + structural
-bun run packages/evals/src/index.ts --layers copy,semantic       # custom subset
-bun run packages/evals/src/index.ts --screenshots                # render PNGs; no vision judge
-bun run packages/evals/src/index.ts --vision-judge               # implies --screenshots; needs ANTHROPIC_API_KEY
+bun run packages/evals/src/index.ts                                  # default: copy + semantic + structural
+bun run packages/evals/src/index.ts --layers copy,semantic           # custom subset
+bun run packages/evals/src/index.ts --screenshots                    # render PNGs; no vision judge
+bun run packages/evals/src/index.ts --vision-judge                   # claude judge; needs ANTHROPIC_API_KEY
+bun run packages/evals/src/index.ts --vision-judge \
+  --vision-provider openai                                            # gpt-4o judge; needs OPENAI_API_KEY
+bun run packages/evals/src/index.ts --vision-judge \
+  --vision-provider gemini --vision-model gemini-2.5-pro              # custom model id
 ```
 
 ## What it does not measure (yet)
@@ -93,39 +97,40 @@ bun run packages/evals/src/index.ts --out reports/2026-04-29.json
 
 The default run uses two mock agents:
 
-- `mock-token-aware` — extracts hex codes and font families from the context
-  string and uses them. **This is the harness self-test:** with this agent,
-  `designmd` and `dtcg` should score high, `prose` lower, `none` zero. If
-  they do not, the scorer is broken.
+- `mock-token-aware` — looks up the named tokens (`primary`, `on-primary`,
+  `surface`, `on-surface`) and the first font family in the context, then
+  renders HTML using them. **This is the harness self-test:** with this
+  agent, `designmd` and `dtcg` should score high, `prose` lower, `none`
+  zero. If they do not, the scorer is broken.
 - `mock-off-brand` — ignores context, paints in `#ff00ff`/Comic Sans. Should
   score near zero on every format. Sanity check that the scorer actually
   penalizes wrong outputs.
 
-## How to wire in a real agent
+## Real-model agents
 
-Open `src/agents.ts` and replace the body of `claudeAgent.render`:
+Three real-model agents ship out of the box. SDKs are loaded lazily so the
+default mock-only run does not require any provider API key.
 
-```ts
-import Anthropic from '@anthropic-ai/sdk';
-const client = new Anthropic();
+| Agent id | SDK | API key | Default model |
+|:---------|:----|:--------|:--------------|
+| `claude` | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
+| `openai` | `openai` | `OPENAI_API_KEY` | `gpt-4o` |
+| `gemini` | `@google/genai` | `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | `gemini-2.5-flash` |
 
-export const claudeAgent: Agent = {
-  id: 'claude-sonnet-4-6',
-  async render(task, context) {
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      system: 'You are a UI engineer. Use only the design system in <design_system>. Output only HTML.',
-      messages: [
-        { role: 'user', content: `<design_system>\n${context}\n</design_system>\n\n${task.prompt}` },
-      ],
-    });
-    return message.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
-  },
-};
+Pick the agents to run via `--agents`:
+
+```bash
+bun run packages/evals/src/index.ts --agents mock-token-aware,claude
+bun run packages/evals/src/index.ts --agents claude,openai,gemini
 ```
 
-Then add it to the `agents` list in `src/index.ts`.
+To override a model id, construct an agent in code:
+
+```ts
+import { makeOpenAIAgent } from '@google/design.md-evals/agents.js';
+
+const gpt5 = makeOpenAIAgent({ model: 'gpt-5' });
+```
 
 ## How to add a task
 

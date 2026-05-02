@@ -6,10 +6,17 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { offBrandMockAgent, tokenAwareMockAgent } from './agents.js';
+import {
+  claudeAgent,
+  geminiAgent,
+  offBrandMockAgent,
+  openaiAgent,
+  tokenAwareMockAgent,
+} from './agents.js';
 import { run } from './runner.js';
 import { TASKS } from './tasks.js';
-import type { DesignFixture, Format, LayerToggles, Score } from './types.js';
+import type { Agent, DesignFixture, Format, LayerToggles, Score } from './types.js';
+import type { VisionProvider } from './vision.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
@@ -24,6 +31,45 @@ const DEFAULT_FORMATS: Format[] = ['designmd', 'prose', 'dtcg', 'none'];
 
 const ALL_LAYERS = ['copy', 'semantic', 'structural', 'screenshot', 'vision'] as const;
 type LayerName = (typeof ALL_LAYERS)[number];
+
+const ALL_AGENTS: Record<string, Agent> = {
+  'mock-token-aware': tokenAwareMockAgent,
+  'mock-off-brand': offBrandMockAgent,
+  claude: claudeAgent,
+  openai: openaiAgent,
+  gemini: geminiAgent,
+};
+
+const PROVIDER_KEYS: Record<string, string[]> = {
+  claude: ['ANTHROPIC_API_KEY'],
+  openai: ['OPENAI_API_KEY'],
+  gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+};
+
+const VISION_PROVIDERS: VisionProvider[] = ['claude', 'openai', 'gemini'];
+
+function parseAgents(arg: string): Agent[] {
+  const ids = arg.split(',').map((s) => s.trim()).filter(Boolean);
+  const out: Agent[] = [];
+  for (const id of ids) {
+    const a = ALL_AGENTS[id];
+    if (!a) {
+      throw new Error(`Unknown agent '${id}'. Known: ${Object.keys(ALL_AGENTS).join(', ')}`);
+    }
+    requireProviderKey(id);
+    out.push(a);
+  }
+  return out;
+}
+
+function requireProviderKey(agentId: string): void {
+  const keys = PROVIDER_KEYS[agentId];
+  if (!keys) return;
+  for (const k of keys) {
+    if (process.env[k]) return;
+  }
+  throw new Error(`Agent '${agentId}' requires one of: ${keys.join(', ')}`);
+}
 
 function parseLayers(arg: string): LayerToggles {
   const tokens = arg.split(',').map((s) => s.trim()).filter(Boolean);
@@ -54,23 +100,43 @@ async function main() {
   const layersArg = flag(args, '--layers');
   const layers: LayerToggles = layersArg ? parseLayers(layersArg) : { copy: true, semantic: true, structural: true };
   if (hasFlag(args, '--screenshots')) layers.screenshot = true;
+
+  const visionProviderArg = flag(args, '--vision-provider') as VisionProvider | undefined;
+  const visionModelArg = flag(args, '--vision-model');
   if (hasFlag(args, '--vision-judge')) {
     layers.vision = true;
     layers.screenshot = true;
-    if (!process.env['ANTHROPIC_API_KEY']) {
-      throw new Error('--vision-judge requires ANTHROPIC_API_KEY in env.');
+  }
+  if (layers.vision) {
+    const provider = visionProviderArg ?? 'claude';
+    if (!VISION_PROVIDERS.includes(provider)) {
+      throw new Error(`Unknown --vision-provider '${provider}'. Known: ${VISION_PROVIDERS.join(', ')}`);
     }
+    requireProviderKey(provider);
   }
 
+  const agentsArg = flag(args, '--agents');
+  const agents = agentsArg
+    ? parseAgents(agentsArg)
+    : [tokenAwareMockAgent, offBrandMockAgent];
+
   const reportsDir = dirname(resolve(outPath));
+
+  const visionOptions = layers.vision
+    ? {
+        provider: (visionProviderArg ?? 'claude') as VisionProvider,
+        ...(visionModelArg ? { model: visionModelArg } : {}),
+      }
+    : undefined;
 
   const report = await run({
     designs: DEFAULT_DESIGNS,
     tasks: TASKS,
     formats: DEFAULT_FORMATS,
-    agents: [tokenAwareMockAgent, offBrandMockAgent],
+    agents,
     layers,
     reportsDir,
+    ...(visionOptions ? { vision: visionOptions } : {}),
   });
 
   mkdirSync(reportsDir, { recursive: true });
