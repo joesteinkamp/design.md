@@ -24,35 +24,64 @@ For each `(design × task × format × agent)` cell the harness:
    - `dtcg` — the same tokens emitted as DTCG `tokens.json` (control: "is *this* format doing the work, vs. any structured tokens?").
    - `none` — empty string (control: "is the agent just doing what it would have done anyway?").
 3. Asks an agent to render a task (e.g. "build a marketing hero") given that context.
-4. Extracts the colors, font-families, and dimensions from the agent's output.
-5. Scores each dimension against the design system tokens:
-   - **`colorScore`** — fraction of distinct hex colors in the output that fall within
-     a perceptual tolerance of *some* declared `colors.*` token.
-   - **`typographyScore`** — fraction of distinct `font-family` declarations that
-     match a family declared in `typography.*`.
-   - **`spacingScore`** — fraction of `px` / `rem` dimensions in the output that
-     snap to the declared `spacing` / `rounded` scale.
-   - **`aggregate`** — `0.5·color + 0.25·type + 0.25·space`.
+4. Runs four layers of scoring on the output. Each layer is independently toggleable so you can run the cheap ones in CI and the expensive ones offline.
 
-Aggregating across runs gives a single mean score per format. **The DESIGN.md
-hypothesis is that `byFormat.designmd.mean.aggregate` ≫ `byFormat.none.mean.aggregate`,
-and ≥ `byFormat.dtcg` and `byFormat.prose`.** If it is not, the format is not
-earning its keep over the alternatives — which is the only thing daily-driving
-cannot tell you.
+### Layer 1 — Token extraction (always on)
+
+Pulls colors, font-families, and dimensions from the rendered HTML and compares them to the DESIGN.md frontmatter.
+
+- **`colorScore`** — fraction of distinct hex colors in the output that fall within a perceptual tolerance of *some* declared `colors.*` token.
+- **`typographyScore`** — fraction of distinct `font-family` declarations that match a family declared in `typography.*`.
+- **`spacingScore`** — fraction of `px` / `rem` dimensions in the output that snap to the declared `spacing` / `rounded` scale.
+
+### Layer 2 — Voice/copy rules (`copy`)
+
+Reuses the existing `@google/design.md/linter` copy descriptors against a synthetic `DesignSystemState` built from the agent's HTML. Buttons, headings, and nav links from the output become virtual components; paragraph text becomes a synthetic prose section. The linter's `bannedTermInProse`, `approvedTermViolation`, `buttonExceedsWordLimit`, `errorPatternViolation`, `casingMismatch`, and `reservedNameForm` rules then run unchanged.
+
+- **`copyScore`** — `1 − findings/labels`, floored at 0.
+
+### Layer 3 — Semantic assertions (`semantic`)
+
+Each `Task` may declare deterministic per-element assertions (e.g. "the `<button>` background must resolve to `{colors.primary}`"). The runner querySelectors the rendered HTML, reads inline `style`, resolves `{tokens.path}` against the frontmatter, and compares with the same color tolerance used by Layer 1.
+
+- **`semanticScore`** — `passed/total` over the task's assertions.
+
+### Layer 4 — Visual fidelity (`screenshot`, `vision`)
+
+Behind opt-in flags. Renders each output to a PNG via Playwright, optionally persists screenshots, and optionally judges visual fidelity with Claude.
+
+- **`structuralScore`** — fraction of `task.expectedElements` selectors that find a match. Always on by default; cheap (no Playwright, just `linkedom`).
+- **`visionScore`** — Claude Sonnet 4.6 receives the screenshot, the task prompt, and the DESIGN.md, and returns a 0–1 fidelity score with a one-sentence rationale. Behind `--vision-judge`.
+
+### Aggregate
+
+Aggregate is a weighted mean of *only the subscores that ran*. Disabling a layer drops it from both numerator and denominator so you don't dilute the result. Default weights:
+
+| Layer       | Weight |
+|:------------|:------:|
+| color       | 0.30 |
+| typography  | 0.10 |
+| spacing     | 0.10 |
+| copy        | 0.15 |
+| semantic    | 0.20 |
+| structural  | 0.05 |
+| vision      | 0.10 |
+
+Aggregating across runs gives a single mean score per format. **The DESIGN.md hypothesis is that `byFormat.designmd.mean.aggregate` ≫ `byFormat.none.mean.aggregate`, and ≥ `byFormat.dtcg` and `byFormat.prose`.**
+
+## Layer flags
+
+```bash
+bun run packages/evals/src/index.ts                              # default: copy + semantic + structural
+bun run packages/evals/src/index.ts --layers copy,semantic       # custom subset
+bun run packages/evals/src/index.ts --screenshots                # render PNGs; no vision judge
+bun run packages/evals/src/index.ts --vision-judge               # implies --screenshots; needs ANTHROPIC_API_KEY
+```
 
 ## What it does not measure (yet)
 
-- **Visual fidelity** — there is no headless-browser screenshot or pixel diff.
-  The natural follow-up is rendering each output with Playwright and scoring
-  layout/structure with a vision model or a structural diff against a reference.
-- **Component correctness** — we do not check that "primary CTA" is actually
-  the primary-color one, only that the colors used are *in* the palette. A
-  semantic scorer would prompt a separate judge model with the task spec and
-  the rendered HTML.
-- **Voice / copy** — the linter already has rules for these; a real harness
-  would re-run those rules against the agent's output text.
-- **Color distance** — we use sRGB Euclidean distance, not CIEDE2000. Fine
-  for a sketch; swap in `culori` or similar before publishing numbers.
+- **Color distance** — we use sRGB Euclidean distance, not CIEDE2000. Fine for a sketch; swap in `culori` or similar before publishing numbers.
+- **Vision-judge prompt rigor** — the judge prompt is a sketch. A real harness would calibrate it against human-rated reference outputs.
 
 ## How to run
 
@@ -118,12 +147,21 @@ different typography systems, themed/dark variants.
 {
   "startedAt": "...",
   "finishedAt": "...",
-  "runs": [{ "designId": "...", "taskId": "...", "format": "designmd", "agentId": "...", "output": "<!doctype html>...", "extracted": {...}, "score": {...} }],
+  "runs": [{
+    "designId": "...", "taskId": "...", "format": "designmd", "agentId": "...",
+    "output": "<!doctype html>...",
+    "extracted": {...},
+    "score": { "colorScore": 1, "typographyScore": 0.33, "spacingScore": 0,
+               "copyScore": 0.5, "semanticScore": 1, "structuralScore": 1,
+               "aggregate": 0.73 },
+    "assertions": [{ "selector": "button", "role": "primary-cta", "passed": true, "detail": "ok" }],
+    "copyFindings": [{ "rule": "casing-mismatch", "severity": "warning", "message": "..." }]
+  }],
   "byFormat": {
-    "designmd": { "count": 18, "mean": { "aggregate": 0.91, "colorScore": 0.95, "typographyScore": 0.87, "spacingScore": 0.85 } },
-    "prose":    { "count": 18, "mean": { "aggregate": 0.42, ... } },
-    "dtcg":     { "count": 18, "mean": { "aggregate": 0.88, ... } },
-    "none":     { "count": 18, "mean": { "aggregate": 0.05, ... } }
+    "designmd": { "count": 18, "mean": { "aggregate": 0.73, "colorScore": ..., "semanticScore": ..., ... } },
+    "prose":    { "count": 18, "mean": { "aggregate": 0.24, ... } },
+    "dtcg":     { "count": 18, "mean": { "aggregate": 0.71, ... } },
+    "none":     { "count": 18, "mean": { "aggregate": 0.24, ... } }
   }
 }
 ```

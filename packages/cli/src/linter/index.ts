@@ -25,7 +25,9 @@ export type {
   ResolvedTypography,
   ResolvedValue,
   ComponentDef,
+  RegistryEntry,
 } from './model/spec.js';
+export type { DocumentSection, LineRange, SuppressionDirective } from './parser/spec.js';
 export type { Finding, Severity } from './linter/spec.js';
 export type { TailwindEmitterResult, TailwindThemeExtend } from './tailwind/spec.js';
 export type { DtcgEmitterResult, DtcgTokenFile } from './dtcg/spec.js';
@@ -56,7 +58,20 @@ export {
   pairContrast,
   mixedPairForeground,
   rampAnchorNaming,
+  bannedTermInProse,
+  bannedTermInProseRule,
+  approvedTermViolation,
+  approvedTermViolationRule,
+  buttonExceedsWordLimit,
+  buttonExceedsWordLimitRule,
+  errorPatternViolation,
+  errorPatternViolationRule,
+  casingMismatch,
+  casingMismatchRule,
+  reservedNameForm,
+  reservedNameFormRule,
 } from './linter/rules/index.js';
+export type { RuleDescriptor, RuleFinding } from './linter/rules/types.js';
 export { contrastRatio } from './model/handler.js';
 export { TailwindEmitterHandler } from './tailwind/handler.js';
 export { renderTailwindThemeCss } from './tailwind/css.js';
