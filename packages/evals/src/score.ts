@@ -3,12 +3,16 @@
 // Licensed under the Apache License, Version 2.0 (the "License").
 
 import type { ParsedDesign } from './formats.js';
-import type { ExtractedOutput, Score } from './types.js';
+import type { ExtractedOutput, Score, ScoreWeights } from './types.js';
+import { DEFAULT_WEIGHTS } from './types.js';
 
 const HEX_RE = /#[0-9a-fA-F]{3,8}\b/g;
 const FONT_FAMILY_DECL_RE = /font-family\s*:\s*([^;"'}]+)/gi;
 const PX_RE = /(\d+(?:\.\d+)?)px\b/g;
 const REM_RE = /(\d+(?:\.\d+)?)rem\b/g;
+
+export const COLOR_TOLERANCE = 0.05;
+export const DIM_TOLERANCE = 0.5;
 
 export function extract(html: string): ExtractedOutput {
   const colors = unique(html.match(HEX_RE) ?? []).map(normalizeHex);
@@ -29,7 +33,7 @@ function unique<T>(xs: T[]): T[] {
   return [...new Set(xs)];
 }
 
-function normalizeHex(h: string): string {
+export function normalizeHex(h: string): string {
   let hex = h.toLowerCase().replace(/^#/, '');
   if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
   if (hex.length === 4) hex = hex.split('').map((c) => c + c).join('').slice(0, 8);
@@ -42,14 +46,14 @@ function hexToRgb(hex: string): [number, number, number] {
 }
 
 /** sRGB Euclidean distance, normalized to [0,1]. Placeholder for proper deltaE. */
-function colorDistance(a: string, b: string): number {
+export function colorDistance(a: string, b: string): number {
   const [r1, g1, b1] = hexToRgb(a);
   const [r2, g2, b2] = hexToRgb(b);
   const d = Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
   return d / Math.sqrt(3 * 255 ** 2);
 }
 
-function tokenColors(fm: Record<string, any>): string[] {
+export function tokenColors(fm: Record<string, any>): string[] {
   const colors = (fm['colors'] ?? {}) as Record<string, unknown>;
   return Object.values(colors)
     .filter((v): v is string => typeof v === 'string' && v.startsWith('#'))
@@ -99,10 +103,12 @@ function tokenRem(fm: Record<string, any>): number[] {
   return out;
 }
 
-const COLOR_TOLERANCE = 0.05;
-const DIM_TOLERANCE = 0.5;
-
-export function score(extracted: ExtractedOutput, design: ParsedDesign): Score {
+/**
+ * Score the token-level extracted output against the source design system.
+ * Aggregate is computed by combineScore against the (color, typography, spacing)
+ * subscores only — additional layers are merged in by the runner.
+ */
+export function score(extracted: ExtractedOutput, design: ParsedDesign): Pick<Score, 'colorScore' | 'typographyScore' | 'spacingScore'> {
   const palette = tokenColors(design.frontmatter);
   const families = tokenFontFamilies(design.frontmatter);
   const pxScale = tokenPx(design.frontmatter);
@@ -129,27 +135,65 @@ export function score(extracted: ExtractedOutput, design: ParsedDesign): Score {
       : allDims.filter(({ d, scale }) => scale.some((s) => Math.abs(d - s) <= DIM_TOLERANCE)).length /
         allDims.length;
 
-  const aggregate = 0.5 * colorScore + 0.25 * typographyScore + 0.25 * spacingScore;
-
-  return { colorScore, typographyScore, spacingScore, aggregate };
+  return { colorScore, typographyScore, spacingScore };
 }
 
+/**
+ * Combine subscores into a weighted aggregate. Weights for absent subscores
+ * are dropped from both numerator and denominator, so disabling a layer does
+ * not dilute the result.
+ */
+export function combineScore(parts: Partial<Score>, weights: ScoreWeights = DEFAULT_WEIGHTS): number {
+  const entries: Array<[number | undefined, number]> = [
+    [parts.colorScore, weights.color],
+    [parts.typographyScore, weights.typography],
+    [parts.spacingScore, weights.spacing],
+    [parts.copyScore, weights.copy],
+    [parts.semanticScore, weights.semantic],
+    [parts.structuralScore, weights.structural],
+    [parts.visionScore, weights.vision],
+  ];
+  let num = 0;
+  let den = 0;
+  for (const [v, w] of entries) {
+    if (typeof v === 'number') {
+      num += w * v;
+      den += w;
+    }
+  }
+  return den === 0 ? 0 : num / den;
+}
+
+/**
+ * Resolve a `'{tokens.path}'` reference against the parsed frontmatter.
+ * Returns the resolved value (string for colors and font families, object for
+ * typography blocks) or `undefined` when the reference does not resolve.
+ */
+export function resolveTokenRef(ref: string, fm: Record<string, any>): unknown {
+  const m = /^\{([^}]+)\}$/.exec(ref.trim());
+  if (!m) return undefined;
+  const parts = m[1]!.split('.');
+  let cur: any = fm;
+  for (const p of parts) {
+    if (cur == null || typeof cur !== 'object') return undefined;
+    cur = cur[p];
+  }
+  return cur;
+}
+
+/** Compute the per-format mean by averaging each subscore across runs that produced it. */
 export function meanScore(scores: Score[]): Score {
-  if (scores.length === 0) return { colorScore: 0, typographyScore: 0, spacingScore: 0, aggregate: 0 };
-  const sum = scores.reduce(
-    (acc, s) => ({
-      colorScore: acc.colorScore + s.colorScore,
-      typographyScore: acc.typographyScore + s.typographyScore,
-      spacingScore: acc.spacingScore + s.spacingScore,
-      aggregate: acc.aggregate + s.aggregate,
-    }),
-    { colorScore: 0, typographyScore: 0, spacingScore: 0, aggregate: 0 },
-  );
-  const n = scores.length;
-  return {
-    colorScore: sum.colorScore / n,
-    typographyScore: sum.typographyScore / n,
-    spacingScore: sum.spacingScore / n,
-    aggregate: sum.aggregate / n,
-  };
+  const empty: Score = { colorScore: 0, typographyScore: 0, spacingScore: 0, aggregate: 0 };
+  if (scores.length === 0) return empty;
+  const fields = ['colorScore', 'typographyScore', 'spacingScore', 'copyScore', 'semanticScore', 'structuralScore', 'visionScore', 'aggregate'] as const;
+  const out: Record<string, number | undefined> = {};
+  for (const f of fields) {
+    const values = scores.map((s) => s[f]).filter((v): v is number => typeof v === 'number');
+    if (values.length === 0) {
+      out[f] = f === 'colorScore' || f === 'typographyScore' || f === 'spacingScore' || f === 'aggregate' ? 0 : undefined;
+    } else {
+      out[f] = values.reduce((a, b) => a + b, 0) / values.length;
+    }
+  }
+  return out as unknown as Score;
 }

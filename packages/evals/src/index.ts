@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { offBrandMockAgent, tokenAwareMockAgent } from './agents.js';
 import { run } from './runner.js';
 import { TASKS } from './tasks.js';
-import type { DesignFixture, Format } from './types.js';
+import type { DesignFixture, Format, LayerToggles, Score } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
@@ -22,28 +22,79 @@ const DEFAULT_DESIGNS: DesignFixture[] = [
 
 const DEFAULT_FORMATS: Format[] = ['designmd', 'prose', 'dtcg', 'none'];
 
+const ALL_LAYERS = ['copy', 'semantic', 'structural', 'screenshot', 'vision'] as const;
+type LayerName = (typeof ALL_LAYERS)[number];
+
+function parseLayers(arg: string): LayerToggles {
+  const tokens = arg.split(',').map((s) => s.trim()).filter(Boolean);
+  const out: LayerToggles = { copy: false, semantic: false, structural: false, screenshot: false, vision: false };
+  for (const t of tokens) {
+    if ((ALL_LAYERS as readonly string[]).includes(t)) {
+      out[t as LayerName] = true;
+    } else {
+      throw new Error(`Unknown layer '${t}'. Known: ${ALL_LAYERS.join(', ')}`);
+    }
+  }
+  if (out.vision) out.screenshot = true;
+  return out;
+}
+
+function flag(args: string[], name: string): string | undefined {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : undefined;
+}
+
+function hasFlag(args: string[], name: string): boolean {
+  return args.includes(name);
+}
+
 async function main() {
   const args = process.argv.slice(2);
-  const outArg = args.indexOf('--out');
-  const outPath = outArg >= 0 ? args[outArg + 1]! : 'eval-report.json';
+  const outPath = flag(args, '--out') ?? 'eval-report.json';
+  const layersArg = flag(args, '--layers');
+  const layers: LayerToggles = layersArg ? parseLayers(layersArg) : { copy: true, semantic: true, structural: true };
+  if (hasFlag(args, '--screenshots')) layers.screenshot = true;
+  if (hasFlag(args, '--vision-judge')) {
+    layers.vision = true;
+    layers.screenshot = true;
+    if (!process.env['ANTHROPIC_API_KEY']) {
+      throw new Error('--vision-judge requires ANTHROPIC_API_KEY in env.');
+    }
+  }
+
+  const reportsDir = dirname(resolve(outPath));
 
   const report = await run({
     designs: DEFAULT_DESIGNS,
     tasks: TASKS,
     formats: DEFAULT_FORMATS,
     agents: [tokenAwareMockAgent, offBrandMockAgent],
+    layers,
+    reportsDir,
   });
 
-  mkdirSync(dirname(resolve(outPath)) || '.', { recursive: true });
+  mkdirSync(reportsDir, { recursive: true });
   writeFileSync(outPath, JSON.stringify(report, null, 2));
 
   console.log(`Wrote ${report.runs.length} runs to ${outPath}`);
-  console.log('Mean aggregate score by format:');
+  console.log('Mean scores by format:');
   for (const [format, { count, mean }] of Object.entries(report.byFormat)) {
-    console.log(
-      `  ${format.padEnd(10)} n=${String(count).padEnd(3)} aggregate=${mean.aggregate.toFixed(3)} color=${mean.colorScore.toFixed(3)} type=${mean.typographyScore.toFixed(3)} space=${mean.spacingScore.toFixed(3)}`,
-    );
+    console.log(`  ${format.padEnd(10)} n=${String(count).padEnd(3)} ${formatMean(mean)}`);
   }
+}
+
+function formatMean(m: Score): string {
+  const cells: string[] = [
+    `agg=${m.aggregate.toFixed(3)}`,
+    `color=${m.colorScore.toFixed(3)}`,
+    `type=${m.typographyScore.toFixed(3)}`,
+    `space=${m.spacingScore.toFixed(3)}`,
+  ];
+  if (typeof m.copyScore === 'number') cells.push(`copy=${m.copyScore.toFixed(3)}`);
+  if (typeof m.semanticScore === 'number') cells.push(`sem=${m.semanticScore.toFixed(3)}`);
+  if (typeof m.structuralScore === 'number') cells.push(`struct=${m.structuralScore.toFixed(3)}`);
+  if (typeof m.visionScore === 'number') cells.push(`vis=${m.visionScore.toFixed(3)}`);
+  return cells.join(' ');
 }
 
 main().catch((err) => {
