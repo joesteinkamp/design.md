@@ -6,16 +6,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  claudeAgent,
-  geminiAgent,
-  offBrandMockAgent,
-  openaiAgent,
-  tokenAwareMockAgent,
-} from './agents.js';
+import { offBrandMockAgent, tokenAwareMockAgent } from './agents.js';
+import { selectAgents, selectVisionProvider } from './cli-helpers.js';
 import { run } from './runner.js';
 import { TASKS } from './tasks.js';
-import type { Agent, DesignFixture, Format, LayerToggles, Score } from './types.js';
+import type { DesignFixture, Format, LayerToggles, Score } from './types.js';
 import type { VisionProvider } from './vision.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -31,45 +26,6 @@ const DEFAULT_FORMATS: Format[] = ['designmd', 'prose', 'dtcg', 'none'];
 
 const ALL_LAYERS = ['copy', 'semantic', 'structural', 'screenshot', 'vision'] as const;
 type LayerName = (typeof ALL_LAYERS)[number];
-
-const ALL_AGENTS: Record<string, Agent> = {
-  'mock-token-aware': tokenAwareMockAgent,
-  'mock-off-brand': offBrandMockAgent,
-  claude: claudeAgent,
-  openai: openaiAgent,
-  gemini: geminiAgent,
-};
-
-const PROVIDER_KEYS: Record<string, string[]> = {
-  claude: ['ANTHROPIC_API_KEY'],
-  openai: ['OPENAI_API_KEY'],
-  gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-};
-
-const VISION_PROVIDERS: VisionProvider[] = ['claude', 'openai', 'gemini'];
-
-function parseAgents(arg: string): Agent[] {
-  const ids = arg.split(',').map((s) => s.trim()).filter(Boolean);
-  const out: Agent[] = [];
-  for (const id of ids) {
-    const a = ALL_AGENTS[id];
-    if (!a) {
-      throw new Error(`Unknown agent '${id}'. Known: ${Object.keys(ALL_AGENTS).join(', ')}`);
-    }
-    requireProviderKey(id);
-    out.push(a);
-  }
-  return out;
-}
-
-function requireProviderKey(agentId: string): void {
-  const keys = PROVIDER_KEYS[agentId];
-  if (!keys) return;
-  for (const k of keys) {
-    if (process.env[k]) return;
-  }
-  throw new Error(`Agent '${agentId}' requires one of: ${keys.join(', ')}`);
-}
 
 function parseLayers(arg: string): LayerToggles {
   const tokens = arg.split(',').map((s) => s.trim()).filter(Boolean);
@@ -99,7 +55,8 @@ async function main() {
   const outPath = flag(args, '--out') ?? 'eval-report.json';
   const layersArg = flag(args, '--layers');
   const layers: LayerToggles = layersArg ? parseLayers(layersArg) : { copy: true, semantic: true, structural: true };
-  if (hasFlag(args, '--screenshots')) layers.screenshot = true;
+  const screenshotsExplicit = hasFlag(args, '--screenshots');
+  if (screenshotsExplicit) layers.screenshot = true;
 
   const visionProviderArg = flag(args, '--vision-provider') as VisionProvider | undefined;
   const visionModelArg = flag(args, '--vision-model');
@@ -107,24 +64,44 @@ async function main() {
     layers.vision = true;
     layers.screenshot = true;
   }
+
+  const env = (k: string): string | undefined => process.env[k];
+
+  let resolvedVisionProvider: VisionProvider | undefined;
   if (layers.vision) {
-    const provider = visionProviderArg ?? 'claude';
-    if (!VISION_PROVIDERS.includes(provider)) {
-      throw new Error(`Unknown --vision-provider '${provider}'. Known: ${VISION_PROVIDERS.join(', ')}`);
+    const requested = visionProviderArg ?? 'claude';
+    const result = selectVisionProvider(requested, env);
+    for (const w of result.warnings) console.warn(`warn: ${w}`);
+    if (!result.provider) {
+      layers.vision = false;
+      if (!screenshotsExplicit) layers.screenshot = false;
+    } else {
+      resolvedVisionProvider = result.provider;
     }
-    requireProviderKey(provider);
   }
 
   const agentsArg = flag(args, '--agents');
-  const agents = agentsArg
-    ? parseAgents(agentsArg)
-    : [tokenAwareMockAgent, offBrandMockAgent];
+  const requestedAgentIds = agentsArg
+    ? agentsArg.split(',').map((s) => s.trim()).filter(Boolean)
+    : null;
+
+  let agents;
+  if (requestedAgentIds) {
+    const result = selectAgents(requestedAgentIds, env);
+    for (const w of result.warnings) console.warn(`warn: ${w}`);
+    if (result.agents.length === 0) {
+      throw new Error('No agents available to run. Set the missing API keys or pick a mock agent.');
+    }
+    agents = result.agents;
+  } else {
+    agents = [tokenAwareMockAgent, offBrandMockAgent];
+  }
 
   const reportsDir = dirname(resolve(outPath));
 
-  const visionOptions = layers.vision
+  const visionOptions = layers.vision && resolvedVisionProvider
     ? {
-        provider: (visionProviderArg ?? 'claude') as VisionProvider,
+        provider: resolvedVisionProvider,
         ...(visionModelArg ? { model: visionModelArg } : {}),
       }
     : undefined;
